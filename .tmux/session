@@ -1,0 +1,7 @@
+selectp -t 0
+splitw -h
+selectp -t 0
+resize-pane -L -t 2 30
+send-keys -t 1 'vim' C-m
+send-keys -t 1 'C-e' C-m
+selectp -t 0

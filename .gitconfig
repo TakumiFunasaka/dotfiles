@@ -1,0 +1,6 @@
+[user]
+	name = Funasaka Takumi
+	email = takumi.funasaka@gmail.com
+[core]
+  excludesfile = /Users/takumi/.gitignore_global 
+	editor = /usr/local/bin/vim
