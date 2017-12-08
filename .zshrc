@@ -196,6 +196,17 @@ alias vimrc='vi ~/.vimrc'
 # git コマンド
 alias g='git'
 
+function git_current_branch() {
+  local ref
+  ref=$(command git symbolic-ref --quiet HEAD 2> /dev/null)
+  local ret=$?
+  if [[ $ret != 0 ]]; then
+    [[ $ret == 128 ]] && return  # no git repo.
+    ref=$(command git rev-parse --short HEAD 2> /dev/null) || return
+  fi
+  echo ${ref#refs/heads/}
+}
+
 alias ga='git add'
 alias gaa='git add --all'
 alias gapa='git add --patch'
@@ -421,6 +432,7 @@ export GOPATH=/Users/takumi/code/golang
 export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
+export PATH="$(brew --prefix homebrew/php/php70)/bin:$PATH"
 alias vi='/usr/local/bin/vim'
 
 # cdr, add-zsh-hook を有効にする
@@ -472,3 +484,19 @@ function peco-cdr() {
 }
 zle -N peco-cdr
 bindkey '^x' peco-cdr
+
+### aws profile
+export AWS_HOME=~/.aws
+
+function agp {
+  echo $AWS_DEFAULT_PROFILE
+}
+
+function asp {
+  local rprompt=${RPROMPT/<aws:$(agp)>/}
+
+  export AWS_DEFAULT_PROFILE=$1
+  export AWS_PROFILE=$1
+
+  export RPROMPT="<aws:$AWS_DEFAULT_PROFILE>$rprompt"
+}
