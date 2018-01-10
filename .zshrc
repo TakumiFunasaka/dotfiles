@@ -500,3 +500,7 @@ function asp {
 
   export RPROMPT="<aws:$AWS_DEFAULT_PROFILE>$rprompt"
 }
+
+### python3
+alias python='python3'
+alias pip='pip3'
