@@ -1,4 +1,4 @@
-########################################
+#######################################
 # 環境変数
 export LANG=ja_JP.UTF-8
 
@@ -187,11 +187,11 @@ elif which putclip >/dev/null 2>&1 ; then
 fi
 
 # 設定ファイル
-alias vizsh='vi ~/.zshrc'
-alias vizshp='vi ~/.zsh_profile'
+alias vizsh='vim ~/.zshrc'
+alias vizshp='vim ~/.zsh_profile'
 alias rezsh='source ~/.zshrc'
 alias rezshp='source ~/.zsh_profile'
-alias vimrc='vi ~/.vimrc'
+alias vimrc='vim ~/.vimrc'
 
 # git コマンド
 alias g='git'
