@@ -428,11 +428,10 @@ esac
 #######################################
 
 export GOROOT=/usr/local/opt/go/libexec
-export GOPATH=/Users/takumi/code/golang
+export GOPATH=Users/takumi/code
 export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
-export PATH="$(brew --prefix homebrew/php/php70)/bin:$PATH"
 alias vi='/usr/local/bin/vim'
 
 # cdr, add-zsh-hook を有効にする
