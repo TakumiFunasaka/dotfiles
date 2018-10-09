@@ -3,7 +3,7 @@
 	email = takumi.funasaka@gmail.com
 [core]
   excludesfile = /Users/takumi/.gitignore_global 
-	editor = /usr/local/bin/vim
+	editor = vim
 
 [ghq]
     root = ~/code/src

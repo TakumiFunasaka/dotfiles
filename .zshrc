@@ -188,9 +188,9 @@ fi
 
 # 設定ファイル
 alias vizsh='vim ~/.zshrc'
-alias vizshp='vim ~/.zsh_profile'
+alias vizshp='vim ~/.zprofile'
 alias rezsh='source ~/.zshrc'
-alias rezshp='source ~/.zsh_profile'
+alias rezshp='source ~/.zprofile'
 alias vimrc='vim ~/.vimrc'
 
 # git コマンド
@@ -432,6 +432,7 @@ export GOPATH=Users/takumi/code
 export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
+export PATH=$HOME/.anyenv/bin:$PATH
 alias vi='/usr/local/bin/vim'
 
 # cdr, add-zsh-hook を有効にする
