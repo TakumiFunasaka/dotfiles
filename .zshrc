@@ -434,6 +434,7 @@ export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
 export PATH=$HOME/.anyenv/bin:$PATH
 alias vi='/usr/local/bin/vim'
+eval "$(anyenv init -)"
 
 # cdr, add-zsh-hook を有効にする
 autoload -Uz chpwd_recent_dirs cdr add-zsh-hook
