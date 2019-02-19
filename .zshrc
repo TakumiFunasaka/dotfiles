@@ -40,30 +40,6 @@ autoload -Uz chpwd_recent_dirs cdr add-zsh-hook
 ########################################
 
 
-# 起動時にtmuxを起動
-
- if [[ ! -n $TMUX && $- == *l* ]]; then
-   # get the IDs
-   ID="`tmux list-sessions`"
-   if [[ -z "$ID" ]]; then
-     tmux new-session \; source-file ~/.tmux/session
-   fi
-   create_new_session="Create New Session"
-   ID="$ID\n${create_new_session}:"
-   ID="`echo $ID | $PERCOL | cut -d: -f1`"
-   if [[ "$ID" = "${create_new_session}" ]]; then
-     tmux new-session \; source-file ~/.tmux/session
-   elif [[ -n "$ID" ]]; then
-     tmux attach-session -t "$ID"
-   else
-     :  # Start terminal normally
-   fi
- fi
-
-# if [ $SHLVL = 1 ]; then
-#     alias tmux="tmux attach || tmux new-session \; source-file ~/.tmux/session"
-# fi
-
 # 補完
 # 補完機能を有効にする
 autoload -Uz compinit
@@ -433,6 +409,7 @@ export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
 export PATH=$HOME/.anyenv/bin:$PATH
+export PATH=$HOME/.pyenv/shims:$PATH
 alias vi='/usr/local/bin/vim'
 eval "$(anyenv init -)"
 
@@ -505,3 +482,9 @@ function asp {
 ### python3
 alias python='python3'
 alias pip='pip3'
+
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/usr/local/bin/google-cloud-sdk/path.zsh.inc' ]; then . '/usr/local/bin/google-cloud-sdk/path.zsh.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/usr/local/bin/google-cloud-sdk/completion.zsh.inc' ]; then . '/usr/local/bin/google-cloud-sdk/completion.zsh.inc'; fi

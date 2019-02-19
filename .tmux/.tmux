@@ -1,1 +1,0 @@
-/Users/takumifunasaka/dotfiles/.tmux
