@@ -217,6 +217,7 @@ alias gclean='git clean -fd'
 alias gpristine='git reset --hard && git clean -dfx'
 alias gcm='git checkout master'
 alias gcd='git checkout develop'
+alias gcst='git checkout staging'
 alias gcmsg='git commit -m'
 alias gco='git checkout'
 alias gcount='git shortlog -sn'
@@ -409,9 +410,12 @@ export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
 export PATH=$HOME/.anyenv/bin:$PATH
-export PATH=$HOME/.pyenv/shims:$PATH
+# export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
+# export PATH=$HOME/.anyenv/envs/pyenv/bin:$PATH
 alias vi='/usr/local/bin/vim'
 eval "$(anyenv init -)"
+# eval "$(nodenv init -)"
+# eval "$(pyenv init -)"
 
 # cdr, add-zsh-hook を有効にする
 autoload -Uz chpwd_recent_dirs cdr add-zsh-hook

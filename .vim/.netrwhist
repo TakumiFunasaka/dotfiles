@@ -1,0 +1,4 @@
+let g:netrw_dirhistmax  =10
+let g:netrw_dirhist_cnt =2
+let g:netrw_dirhist_1='/Users/Shared/Relocated Items/Security/System/Library/DirectoryServices/DefaultLocalDB'
+let g:netrw_dirhist_2='/Users/takumifunasaka/code/src/github.com/soshikiz/soshikiz_one_api_server/config'
