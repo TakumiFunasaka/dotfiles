@@ -405,17 +405,20 @@ esac
 #######################################
 
 export GOROOT=/usr/local/opt/go/libexec
-export GOPATH=Users/takumi/code
+export GOPATH=$HOME/code
 export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=$PATH:$GOPATH/bin
 export PATH=$HOME/.anyenv/bin:$PATH
-# export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
-# export PATH=$HOME/.anyenv/envs/pyenv/bin:$PATH
+export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
+export PATH=$HOME/.anyenv/envs/pyenv/bin:$PATH
 alias vi='/usr/local/bin/vim'
-eval "$(anyenv init -)"
-# eval "$(nodenv init -)"
-# eval "$(pyenv init -)"
+# eval "$(anyenv init -)"
+eval "$(nodenv init -)"
+eval "$(pyenv init -)"
+
+# homebrew
+eval "$(/opt/homebrew/bin/brew shellenv)"
 
 # cdr, add-zsh-hook を有効にする
 autoload -Uz chpwd_recent_dirs cdr add-zsh-hook
