@@ -412,6 +412,7 @@ export PATH=$PATH:$GOPATH/bin
 export PATH=$HOME/.anyenv/bin:$PATH
 export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
 export PATH=$HOME/.anyenv/envs/pyenv/bin:$PATH
+export PATH=$HOME/.composer/vendor/bin:$PATH
 alias vi='/usr/local/bin/vim'
 # eval "$(anyenv init -)"
 eval "$(nodenv init -)"
