@@ -6,7 +6,7 @@ export LANG=ja_JP.UTF-8
 # 色を使用出来るようにする
 autoload -Uz colors
 # emacs 風キーバインドにする
-bindkey -e
+# bindkey -e
 
 # ヒストリの設定
 HISTFILE=~/.zsh_history
@@ -30,11 +30,6 @@ select-word-style default
 # / も区切りと扱うので、^W でディレクトリ１つ分を削除できる
 zstyle ':zle:*' word-chars " /=;@:{},|"
 zstyle ':zle:*' word-style unspecified
-
-
-## cdr
-autoload -Uz add-zsh-hock
-autoload -Uz chpwd_recent_dirs cdr add-zsh-hook
 
 
 ########################################
@@ -408,94 +403,20 @@ export GOROOT=/usr/local/opt/go/libexec
 export GOPATH=$HOME/code
 export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
+export PATH=/opt/homebrew/bin:$PATH
 export PATH=$PATH:$GOPATH/bin
 export PATH=$HOME/.anyenv/bin:$PATH
 export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
 export PATH=$HOME/.anyenv/envs/pyenv/bin:$PATH
 alias vi='/usr/local/bin/vim'
-# eval "$(anyenv init -)"
+eval "$(anyenv init -)"
 eval "$(nodenv init -)"
 eval "$(pyenv init -)"
-
-# homebrew
-eval "$(/opt/homebrew/bin/brew shellenv)"
-
-# cdr, add-zsh-hook を有効にする
-autoload -Uz chpwd_recent_dirs cdr add-zsh-hook
-add-zsh-hook chpwd chpwd_recent_dirs
- 
-# cdr の設定
-zstyle ':completion:*' recent-dirs-insert both
-zstyle ':chpwd:*' recent-dirs-max 500
-zstyle ':chpwd:*' recent-dirs-default true
-zstyle ':chpwd:*' recent-dirs-file "$HOME/.cache/shell/chpwd-recent-dirs"
-zstyle ':chpwd:*' recent-dirs-pushd true
-
-# function peco-cdr () {
-#     local selected_dir="$(cdr -l | sed 's/^[0-9]\+ \+//' | peco --prompt="cdr >" --query "$LBUFFER")"
-#     if [ -n "$selected_dir" ]; then
-#         BUFFER="cd ${selected_dir}"
-#         zle accept-line
-#     fi
-# }
-# zle -N peco-cdr
-# bindkey '^[r' peco-cdr
-
-#pecoでhistory検索
-function peco-select-history() {
-  BUFFER=$(\history -n -r 1 | peco --query "$LBUFFER")
-  CURSOR=$#BUFFER
-  zle clear-screen
-}
-zle -N peco-select-history
-bindkey '^r' peco-select-history
-
-# ### search a destination from cdr list
-function peco-get-destination-from-cdr() {
-  cdr -l | \
-  sed -e 's/^[[:digit:]]*[[:blank:]]*//' | \
-  peco --query "$LBUFFER"
-}
-
-### search a destination from cdr list and cd the destination
-function peco-cdr() {
-  local destination="$(peco-get-destination-from-cdr)"
-  if [ -n "$destination" ]; then
-    BUFFER="cd $destination"
-    zle accept-line
-  else
-    zle reset-prompt
-  fi
-}
-zle -N peco-cdr
-bindkey '^x' peco-cdr
-
-### aws profile
-export AWS_HOME=~/.aws
-
-function agp {
-  echo $AWS_DEFAULT_PROFILE
-}
-
-function asp {
-  local rprompt=${RPROMPT/<aws:$(agp)>/}
-
-  export AWS_DEFAULT_PROFILE=$1
-  export AWS_PROFILE=$1
-
-  export RPROMPT="<aws:$AWS_DEFAULT_PROFILE>$rprompt"
-}
 
 ### python3
 alias python='python3'
 alias pip='pip3'
 
-# The next line updates PATH for the Google Cloud SDK.
-if [ -f '/usr/local/bin/google-cloud-sdk/path.zsh.inc' ]; then . '/usr/local/bin/google-cloud-sdk/path.zsh.inc'; fi
-
-# The next line enables shell command completion for gcloud.
-if [ -f '/usr/local/bin/google-cloud-sdk/completion.zsh.inc' ]; then . '/usr/local/bin/google-cloud-sdk/completion.zsh.inc'; fi
-
-
-### iTerm2
-function chpwd() { ls; echo -ne "\033]0;$(pwd | rev | awk -F \/ '{print "/"$1"/"$2}'| rev)\007"}
+## asdf
+fpath=(${ASDF_DIR}/completions $fpath)
+autoload -Uz compinit && compinit
