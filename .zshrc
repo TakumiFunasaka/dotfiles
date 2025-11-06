@@ -404,13 +404,16 @@ export GOPATH=$HOME/code
 export GOROOT=/usr/local/opt/go/libexec
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/bin:/bin
 export PATH=/opt/homebrew/bin:$PATH
+export PATH=/opt/homebrew/sbin:$PATH
 export PATH=$PATH:$GOPATH/bin
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
 export PATH=$HOME/.anyenv/bin:$PATH
-export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
+# export PATH=$HOME/.anyenv/envs/nodenv/bin:$PATH
 export PATH=$HOME/.anyenv/envs/pyenv/bin:$PATH
 alias vi='/usr/local/bin/vim'
 eval "$(anyenv init -)"
-eval "$(nodenv init -)"
+# eval "$(nodenv init -)"
 eval "$(pyenv init -)"
 
 ### python3
@@ -420,3 +423,5 @@ alias pip='pip3'
 ## asdf
 fpath=(${ASDF_DIR}/completions $fpath)
 autoload -Uz compinit && compinit
+autoload -Uz bashcompinit && bashcompinit
+complete -C "$(which aws_completer)" aws
