@@ -133,18 +133,54 @@ mise ls-remote node
 - `..`, `...`, `....` - 上のディレクトリへ移動
 
 ### ファイル操作
-- `ls`, `ll`, `la` - exa/lsのエイリアス
+- `ls`, `ll`, `la` - eza/lsのエイリアス
 - `lt` - ツリー表示
 - `cat` - batのエイリアス
 
-### Git
+### Git（基本コマンド）
 - `g` → `git`
 - `gs` → `git status`
 - `ga` → `git add`
+- `gaa` → `git add --all`
 - `gc` → `git commit -v`
+- `gcm` → `git commit -m`
+- `gca` → `git commit --amend`
+
+### Git（ブランチ操作）
 - `gco` → `git checkout`
-- `glog` → `git log --oneline --graph`
-- その他多数（`.zshrc`参照）
+- `gcb` → `git checkout -b`
+- `gb` → `git branch`
+- `gbd` → `git branch -d`
+
+### Git（差分・履歴）
+- `gd` → `git diff`
+- `gds` → `git diff --staged`
+- `glog` → `git log --oneline --graph --decorate`
+- `gloga` → `git log --oneline --graph --decorate --all`
+
+### Git（リモート）
+- `gl` → `git pull`
+- `gp` → `git push`
+- `gf` → `git fetch`
+
+### Git（スタッシュ）
+- `gst` → `git stash`
+- `gsta` → `git stash apply`
+- `gstp` → `git stash pop`
+
+### グローバルエイリアス（超便利！）
+- `G` → `| grep` - コマンドの後ろに付けるだけ
+- `L` → `| less` - ページャーで表示
+- `H` → `| head` - 先頭だけ表示
+- `T` → `| tail` - 末尾だけ表示
+- `C` → `| pbcopy` - クリップボードにコピー
+
+**使用例:**
+```bash
+ls -la G "test"        # ls -la | grep "test"
+history G "git" H      # history | grep "git" | head
+cat file.txt C         # ファイル内容をクリップボードへ
+```
 
 ### リポジトリ管理
 - `repo` - ghq + fzfでリポジトリを検索・移動
@@ -169,9 +205,231 @@ git checkout master  # または任意のコミット
 # install.shが作成したバックアップは ~/dotfiles_backup_YYYYMMDD_HHMMSS にあります
 ```
 
-## 📝 Tips
+## 📝 Tips & 詳細な使い方
 
-### Homebrewパッケージの管理
+### 🎯 mise（バージョンマネージャー）の使い方
+
+#### グローバル設定
+```bash
+# よく使う言語をグローバルにインストール
+mise use -g node@lts          # Node.js LTS版
+mise use -g node@20           # Node.js 20系
+mise use -g python@3.12       # Python 3.12
+mise use -g go@latest         # Go最新版
+
+# インストール済みバージョンの確認
+mise list
+
+# 現在アクティブなバージョンを確認
+mise current
+```
+
+#### プロジェクトごとの設定
+```bash
+# プロジェクトディレクトリで実行
+cd your-project
+mise use node@18              # このプロジェクトだけNode 18
+mise use python@3.11          # このプロジェクトだけPython 3.11
+
+# .mise.toml が自動生成される
+cat .mise.toml
+# [tools]
+# node = "18"
+# python = "3.11"
+
+# プロジェクトメンバーと設定を共有
+git add .mise.toml
+git commit -m "Add mise configuration"
+```
+
+#### 利用可能なバージョンの確認
+```bash
+# Node.jsの利用可能なバージョン一覧
+mise ls-remote node
+
+# 特定のバージョンを検索
+mise ls-remote node | grep "20"
+
+# Pythonの利用可能なバージョン
+mise ls-remote python
+```
+
+#### バージョンの切り替え
+```bash
+# ディレクトリに入ると自動的に切り替わる
+cd project-a      # → Node 18が有効化
+cd ../project-b   # → Node 20が有効化
+cd ~              # → グローバル設定（LTS）に戻る
+```
+
+### 🔍 fzf（ファジーファインダー）の使い方
+
+#### 基本的なキーバインド
+```bash
+# コマンド履歴を検索
+Ctrl+R            # 履歴を検索して実行
+
+# ファイルを検索してパスを挿入
+Ctrl+T            # カレントディレクトリ配下のファイルを検索
+
+# ディレクトリを検索して移動
+Alt+C             # ディレクトリを検索してcd
+```
+
+#### fzfの操作方法
+```
+↑/↓ または Ctrl+j/k  : 上下移動
+Enter                 : 選択して確定
+Ctrl+c または Esc     : キャンセル
+Tab                   : 複数選択（トグル）
+Shift+Tab             : 複数選択解除
+```
+
+#### 実践的な使い方
+```bash
+# Gitブランチを検索して切り替え
+git branch | fzf | xargs git checkout
+
+# プロセスをfzfで選んで終了
+ps aux | fzf | awk '{print $2}' | xargs kill
+
+# ファイルを検索してvimで開く
+vim $(fzf)
+
+# 複数ファイルを選択して削除（Tabで複数選択）
+rm $(fzf -m)
+```
+
+### 🚀 zoxide（スマートcd）の使い方
+
+#### 基本的な使い方
+```bash
+# 初回は通常のcdで移動
+cd ~/Documents/projects/my-awesome-app
+
+# 2回目以降は部分一致でOK
+z awesome         # → ~/Documents/projects/my-awesome-app
+z app            # → 同じく移動
+z my-a           # → 同じく移動
+```
+
+#### よく使うコマンド
+```bash
+z foo            # foo にマッチするディレクトリへ移動
+zi foo           # インタラクティブに選択（複数候補がある場合）
+z foo bar        # foo と bar 両方を含むディレクトリへ
+z -              # 前のディレクトリに戻る
+
+# データベースを表示
+zoxide query -l          # 記憶している全ディレクトリ
+zoxide query -ls foo     # foo にマッチするディレクトリ一覧
+zoxide query --score     # スコア付きで表示
+```
+
+#### 学習の仕組み
+- **頻度**: よく訪れるディレクトリほど優先度が高い
+- **最近性**: 最近使ったディレクトリも優先される
+- **自動削除**: 存在しないディレクトリは自動で削除される
+
+### 📂 eza（モダンなls）の使い方
+
+```bash
+# 基本（アイコン + Git情報付き）
+ls               # eza --icons --git
+ll               # 詳細表示
+la               # 隠しファイルも表示
+lt               # ツリー表示
+
+# さらに詳細な使い方
+eza -l --git            # Git情報を表示
+eza --tree --level=2    # 2階層までツリー表示
+eza -l --sort=size      # サイズでソート
+eza -l --sort=modified  # 更新日時でソート
+eza -la --no-icons      # アイコンなし
+```
+
+### 📄 bat（モダンなcat）の使い方
+
+```bash
+# 基本（シンタックスハイライト付き）
+cat file.json         # JSONが色付きで表示
+cat file.py          # Pythonのコードが色付き
+
+# ページャーとして使う
+less file.txt        # → bat として動作
+
+# 行番号付きで表示
+bat -n file.txt
+
+# 特定の行を表示
+bat -r 10:20 file.txt    # 10〜20行目を表示
+
+# Gitの差分と一緒に表示
+bat -d file.txt          # Git差分を表示
+
+# プレーンテキストとして表示（色なし）
+bat --plain file.txt
+```
+
+### 🔎 ripgrep（高速grep）の使い方
+
+```bash
+# 基本的な検索
+rg "pattern"                    # カレントディレクトリ配下を検索
+rg "pattern" path/              # 特定のディレクトリを検索
+rg -i "pattern"                 # 大文字小文字を区別しない
+
+# ファイルタイプを指定
+rg -t js "function"             # JavaScriptファイルのみ
+rg -t py "class"                # Pythonファイルのみ
+rg -T js "function"             # JavaScriptファイルを除外
+
+# コンテキスト付き表示
+rg -C 3 "pattern"               # 前後3行を表示
+rg -A 2 "pattern"               # 後2行を表示
+rg -B 2 "pattern"               # 前2行を表示
+
+# 統計情報
+rg --stats "pattern"            # マッチ数などの統計
+```
+
+### 🔧 ghq（リポジトリ管理）の使い方
+
+```bash
+# リポジトリをクローン（自動で整理される）
+ghq get https://github.com/user/repo
+# → ~/code/src/github.com/user/repo にクローン
+
+# リポジトリ一覧
+ghq list
+
+# リポジトリのパスを取得
+ghq root
+ghq list -p                     # フルパス表示
+
+# fzfと組み合わせて移動（repoエイリアス）
+repo                            # リポジトリ選択→移動
+```
+
+### 🎨 Starshipプロンプトのカスタマイズ
+
+```bash
+# 設定ファイルを編集
+vim ~/.config/starship.toml
+
+# プリセットを試す
+starship preset nerd-font-symbols -o ~/.config/starship.toml
+starship preset bracketed-segments -o ~/.config/starship.toml
+
+# 設定を確認
+starship config
+
+# 特定のモジュールを無効化（例：時間表示）
+[time]
+disabled = true
+```
+
+### 🍺 Homebrewパッケージの管理
 
 ```bash
 # 現在の環境からBrewfileを生成
@@ -180,15 +438,49 @@ brew bundle dump --file=~/dotfiles/Brewfile --force
 # Brewfileからインストール
 brew bundle --file=~/dotfiles/Brewfile
 
-# クリーンアップ
+# Brewfileに無いパッケージを削除
 brew bundle cleanup --file=~/dotfiles/Brewfile
+
+# Brewfileをチェック
+brew bundle check --file=~/dotfiles/Brewfile
 ```
 
-### fzfの便利な使い方
+### 🔄 便利なワークフロー
 
-- `Ctrl+R` - コマンド履歴を検索
-- `Ctrl+T` - ファイルを検索
-- `Alt+C` - ディレクトリを検索して移動
+#### Git操作の基本フロー
+```bash
+# ブランチを切る
+gcb feature/new-feature
+
+# 変更を加える
+vim file.txt
+
+# コミット＆プッシュ
+gaa                    # 全変更をステージング
+gcm "feat: 新機能追加"  # コミット
+gp                     # プッシュ
+```
+
+#### プロジェクト間の移動
+```bash
+# リポジトリを検索して移動
+repo                   # fzfでリポジトリ選択
+
+# または、zoxideで移動
+z my-project          # よく使うプロジェクトに瞬時に移動
+```
+
+#### ファイル検索とコマンド実行
+```bash
+# ファイルを検索してvimで開く
+vim $(fzf)
+
+# ディレクトリを検索して移動
+cd $(fd --type d | fzf)
+
+# コードを検索してvimで開く
+rg -l "TODO" | fzf | xargs vim
+```
 
 ## 🐛 トラブルシューティング
 
