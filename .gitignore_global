@@ -1,2 +1,36 @@
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Node.js
+node_modules/
 .node-version
+npm-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.python-version
+.venv/
+venv/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# OS generated
+Thumbs.db

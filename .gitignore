@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+
+# Zsh
+.zcompdump*
+
+# Local configuration (not tracked)
+*.local
+

@@ -1,0 +1,97 @@
+# ============================================================================
+# Starship Configuration - モダンなプロンプト設定
+# https://starship.rs/config/
+# ============================================================================
+
+# プロンプトのフォーマット
+format = """
+[╭─](bold green)$directory$git_branch$git_status$git_state
+[╰─](bold green)$character"""
+
+# 右側のプロンプト
+right_format = """$cmd_duration$nodejs$python$rust$golang"""
+
+# タイムアウト（ミリ秒）
+command_timeout = 1000
+
+# ----------------------------------------------------------------------------
+# プロンプト文字
+# ----------------------------------------------------------------------------
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[➜](bold red)"
+
+# ----------------------------------------------------------------------------
+# ディレクトリ
+# ----------------------------------------------------------------------------
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+style = "bold cyan"
+format = "[$path]($style)[$read_only]($read_only_style) "
+
+# ----------------------------------------------------------------------------
+# Git
+# ----------------------------------------------------------------------------
+[git_branch]
+symbol = " "
+style = "bold purple"
+format = "on [$symbol$branch]($style) "
+
+[git_status]
+style = "bold yellow"
+format = "([$all_status$ahead_behind]($style) )"
+conflicted = "🏳 "
+ahead = "⇡${count} "
+behind = "⇣${count} "
+diverged = "⇕⇡${ahead_count}⇣${behind_count} "
+untracked = "?${count} "
+stashed = "📦 "
+modified = "!${count} "
+staged = "+${count} "
+renamed = "»${count} "
+deleted = "✘${count} "
+
+[git_state]
+style = "bold yellow"
+
+# ----------------------------------------------------------------------------
+# コマンド実行時間
+# ----------------------------------------------------------------------------
+[cmd_duration]
+min_time = 2000
+format = "[$duration]($style) "
+style = "bold yellow"
+
+# ----------------------------------------------------------------------------
+# 言語・ツール
+# ----------------------------------------------------------------------------
+[nodejs]
+symbol = " "
+format = "[$symbol($version)]($style) "
+style = "bold green"
+
+[python]
+symbol = " "
+format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style)'
+style = "bold yellow"
+
+[rust]
+symbol = " "
+format = "[$symbol($version)]($style) "
+style = "bold red"
+
+[golang]
+symbol = " "
+format = "[$symbol($version)]($style) "
+style = "bold cyan"
+
+# ----------------------------------------------------------------------------
+# その他
+# ----------------------------------------------------------------------------
+[time]
+disabled = true
+
+[battery]
+disabled = true
+

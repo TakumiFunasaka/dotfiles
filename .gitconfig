@@ -1,9 +1,58 @@
 [user]
 	name = Funasaka Takumi
 	email = takumi.funasaka@gmail.com
-[core]
-  excludesfile = /Users/takumi/.gitignore_global 
-	editor = vim
 
+[core]
+	editor = vim
+	excludesfile = ~/.gitignore_global
+	# 改行コードの自動変換を防ぐ
+	autocrlf = input
+
+[init]
+	# デフォルトブランチ名
+	defaultBranch = main
+
+[pull]
+	# pullの挙動をrebaseに
+	rebase = true
+
+[fetch]
+	# 削除されたリモートブランチをローカルからも削除
+	prune = true
+
+[push]
+	# push時のデフォルトを現在のブランチに
+	default = current
+	# タグの自動push
+	followTags = true
+
+[rebase]
+	# rebase時にstashを自動で行う
+	autoStash = true
+
+[merge]
+	# コンフリクトマーカーをより詳細に
+	conflictStyle = diff3
+
+[diff]
+	# 色分け
+	colorMoved = default
+
+[alias]
+	# よく使うコマンドの短縮形
+	st = status
+	co = checkout
+	br = branch
+	ci = commit
+	unstage = reset HEAD --
+	last = log -1 HEAD
+	visual = log --oneline --graph --decorate --all
+	
 [ghq]
-    root = ~/code/src
+	root = ~/code/src
+
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
