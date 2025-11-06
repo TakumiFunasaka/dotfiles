@@ -138,11 +138,6 @@ case ${OSTYPE} in
   darwin*)
     # Mac固有の設定
     export CLICOLOR=1
-    
-    # Homebrewのパス（Apple Silicon）
-    if [[ -f /opt/homebrew/bin/brew ]]; then
-      eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
     ;;
   linux*)
     # Linux固有の設定
@@ -152,11 +147,7 @@ esac
 # ----------------------------------------------------------------------------
 # ツール初期化
 # ----------------------------------------------------------------------------
-
-# mise (バージョンマネージャー)
-if command -v mise &> /dev/null; then
-  eval "$(mise activate zsh)"
-fi
+# Note: Homebrewとmiseは .zshenv で初期化済み（サンドボックス環境対応）
 
 # Starship (プロンプト)
 if command -v starship &> /dev/null; then

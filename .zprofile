@@ -1,11 +1,7 @@
 # ============================================================================
 # ZSH Profile - ログイン時に1度だけ実行
 # ============================================================================
-
-# Homebrew (Apple Silicon Mac)
-if [[ -f /opt/homebrew/bin/brew ]]; then
-  eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
+# Note: Homebrewとmiseは .zshenv で初期化済み
 
 # XDG Base Directory
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"

@@ -16,7 +16,7 @@ echo "🚀 Dotfiles installation starting..."
 echo "📦 Creating backup..."
 mkdir -p "$BACKUP_DIR"
 
-for file in .zshrc .zprofile .gitconfig .gitignore_global; do
+for file in .zshenv .zshrc .zprofile .gitconfig .gitignore_global; do
   if [ -f "$HOME/$file" ] && [ ! -L "$HOME/$file" ]; then
     echo "  Backing up $file"
     mv "$HOME/$file" "$BACKUP_DIR/"
@@ -36,6 +36,7 @@ echo "🔗 Creating symlinks..."
 mkdir -p "$HOME/.config"
 
 # シンボリックリンク
+ln -sf "$DOTFILES_DIR/.zshenv" "$HOME/.zshenv"
 ln -sf "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 ln -sf "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
 ln -sf "$DOTFILES_DIR/.gitconfig" "$HOME/.gitconfig"

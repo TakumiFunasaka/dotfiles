@@ -75,6 +75,7 @@ mise use -g go@latest
 
 ```
 dotfiles/
+├── .zshenv             # 環境変数（常に読み込まれる）
 ├── .zshrc              # メインのZsh設定
 ├── .zprofile           # ログイン時の設定
 ├── .gitconfig          # Git設定
@@ -82,6 +83,7 @@ dotfiles/
 ├── starship.toml       # Starshipプロンプト設定
 ├── Brewfile            # Homebrewパッケージ定義
 ├── install.sh          # インストールスクリプト
+├── nvim/               # Neovim設定
 └── README.md           # このファイル
 ```
 
@@ -497,9 +499,31 @@ autoload -Uz compinit && compinit
 # Homebrewのパスを確認
 which mise
 
-# .zshrcを再読み込み
+# シェルを再読み込み
+source ~/.zshenv
 source ~/.zshrc
+
+# または
+exec zsh
 ```
+
+### Cursorのサンドボックス環境でnpm/nodeが使えない
+
+Cursorのサンドボックス環境は非インタラクティブシェルのため、`.zshenv`で初期化されます。
+通常は自動的に動作しますが、問題がある場合：
+
+```bash
+# .zshenvが正しくリンクされているか確認
+ls -la ~/.zshenv
+
+# miseが読み込まれているか確認
+echo $MISE_SHELL
+
+# 手動でシェルをリロード
+exec zsh
+```
+
+**根本原因**: `.zshrc`は非インタラクティブシェルでは読み込まれませんが、`.zshenv`は常に読み込まれます。このdotfilesでは`.zshenv`でmiseとHomebrewを初期化しているため、Cursorのサンドボックス環境でも動作します。
 
 ## 📚 参考リンク
 
