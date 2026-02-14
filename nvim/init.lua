@@ -94,23 +94,23 @@ vim.opt.rtp:prepend(lazypath)
 -- プラグイン定義
 require('lazy').setup({
   -- ========================================
-  -- カラースキーム: Catppuccin
+  -- カラースキーム: Gruvbox
   -- ========================================
   {
-    'catppuccin/nvim',
-    name = 'catppuccin',
+    'ellisonleao/gruvbox.nvim',
     priority = 1000,  -- 最初にロード
     config = function()
-      require('catppuccin').setup({
-        flavour = 'mocha',  -- latte, frappe, macchiato, mocha
-        transparent_background = false,
-        integrations = {
-          neotree = true,
-          telescope = { enabled = true },
-          treesitter = true,
+      require('gruvbox').setup({
+        contrast = 'dark',  -- hard, soft, dark(default)
+        transparent_mode = false,
+        italic = {
+          strings = false,
+          emphasis = true,
+          comments = true,
         },
       })
-      vim.cmd.colorscheme('catppuccin')
+      vim.opt.background = 'dark'
+      vim.cmd.colorscheme('gruvbox')
     end,
   },
 
@@ -191,7 +191,7 @@ require('lazy').setup({
     config = function()
       require('lualine').setup({
         options = {
-          theme = 'catppuccin',
+          theme = 'gruvbox',
           section_separators = { left = '', right = '' },
           component_separators = { left = '', right = '' },
         },
@@ -222,6 +222,6 @@ require('lazy').setup({
 }, {
   -- lazy.nvim の設定
   install = {
-    colorscheme = { 'catppuccin' },
+    colorscheme = { 'gruvbox' },
   },
 })

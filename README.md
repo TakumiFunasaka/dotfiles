@@ -39,8 +39,8 @@ mise use -g go@latest
    - Font を **Nerd Font** に変更（例: `Hack Nerd Font`）
    - 未インストールなら `brew install --cask font-hack-nerd-font`
 2. `Profiles` > `Colors` > `Color Presets...` > `Import...`
-   - `~/dotfiles/catppuccin-mocha.itermcolors` を選択
-   - もう一度 `Color Presets...` > `catppuccin-mocha` を選択
+   - `~/dotfiles/gruvbox-dark.itermcolors` を選択
+   - もう一度 `Color Presets...` > `gruvbox-dark` を選択
 3. `Profiles` > `Keys` > `General`
    - Left Option key を `Esc+` に変更
 4. `Profiles` > `Terminal`
@@ -67,7 +67,7 @@ dotfiles/
 │   └── init.lua            # Neovim設定（lazy.nvim + プラグイン）
 ├── bat/
 │   └── config              # bat設定（Catppuccin テーマ）
-├── catppuccin-mocha.itermcolors  # iTerm2カラープリセット
+├── gruvbox-dark.itermcolors      # iTerm2カラープリセット
 ├── Brewfile                # Homebrewパッケージ定義
 ├── install.sh              # インストールスクリプト
 └── README.md               # このファイル
@@ -92,14 +92,14 @@ dotfiles/
 
 ## カラーテーマ
 
-全ツールを **Catppuccin Mocha** で統一している。
+全ツールを **Gruvbox Dark** で統一している。暖色系で目に優しく、ブルーライトが少ない。
 
 | ツール | 設定方法 |
 |---|---|
-| iTerm2 | `catppuccin-mocha.itermcolors` を手動インポート |
+| iTerm2 | `gruvbox-dark.itermcolors` を手動インポート |
 | tmux | `.tmux.conf` にハードコード済み |
-| nvim | lazy.nvim で `catppuccin/nvim` プラグイン |
-| bat | `bat/config` で `--theme="Catppuccin Mocha"` |
+| nvim | lazy.nvim で `ellisonleao/gruvbox.nvim` プラグイン |
+| bat | `bat/config` で `--theme="gruvbox-dark"` |
 | Starship / eza | ターミナルのカラーパレットに従う |
 
 ---
@@ -518,7 +518,7 @@ iTerm2 の `Profiles` > `Terminal` > `Report Terminal Type` が `xterm-256color`
 
 ## 更新履歴
 
-- **2025-02**: tmux 導入、Catppuccin Mocha でカラーテーマ統一、nvim に lazy.nvim + プラグイン追加、Claude Code エイリアス追加
+- **2025-02**: tmux 導入、Gruvbox Dark でカラーテーマ統一、nvim に lazy.nvim + プラグイン追加、Claude Code エイリアス追加
 - **2025-11**: 2025年版に完全刷新、Cursor サンドボックス対応
 
 ## ライセンス

@@ -2,7 +2,7 @@
 # https://github.com/sharkdp/bat
 
 # テーマ: Catppuccin Mocha
---theme="Catppuccin Mocha"
+--theme="gruvbox-dark"
 
 # 行番号を常に表示
 --style="numbers,changes,header"

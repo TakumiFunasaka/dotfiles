@@ -102,12 +102,12 @@ fi
 # ----------------------------------------------------------------------------
 # iTerm2 カラープリセット
 # ----------------------------------------------------------------------------
-if [ -f "$DOTFILES_DIR/catppuccin-mocha.itermcolors" ]; then
+if [ -f "$DOTFILES_DIR/gruvbox-dark.itermcolors" ]; then
   echo ""
-  echo "🎨 iTerm2 Catppuccin Mocha カラープリセット:"
+  echo "🎨 iTerm2 Gruvbox Dark カラープリセット:"
   echo "   手動でインポートしてください:"
   echo "   iTerm2 > Settings > Profiles > Colors > Color Presets... > Import..."
-  echo "   → $DOTFILES_DIR/catppuccin-mocha.itermcolors"
+  echo "   → $DOTFILES_DIR/gruvbox-dark.itermcolors"
 fi
 
 # ----------------------------------------------------------------------------
