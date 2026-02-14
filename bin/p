@@ -123,7 +123,7 @@ def main(stdscr):
             mins = int(remaining) // 60
             secs = int(remaining) % 60
             timer_str = f"{mins}:{secs:02d}"
-            left_part = f" \U0001f345 PAUSE {timer_str}  "
+            left_part = f" PAUSE {timer_str}  "
             right_part = f"  #{sessions}"
             bar_width = w - 1 - str_width(left_part) - len(right_part)
             bar = progress_bar(elapsed_before_pause, total_secs, max(0, bar_width))
