@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+"""t - CLI task manager TUI"""
+
+import curses
+import json
+import os
+import unicodedata
+from datetime import date
+
+TASKS_FILE = os.path.expanduser("~/.tasks.json")
+
+# Nerd Font icons
+ICON_CHECK = "\uf00c"  #
+ICON_EMPTY = "\uf096"  #
+ICON_CURSOR = "\uf054"  #
+ICON_TASK = "\uf0ae"  #
+
+
+def char_width(ch):
+    """Return display width of a single character."""
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    """Return display width of a string."""
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    """Truncate string to fit within max_w display columns."""
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def load_tasks():
+    if os.path.exists(TASKS_FILE):
+        with open(TASKS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def save_tasks(tasks):
+    with open(TASKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(tasks, f, ensure_ascii=False, indent=2)
+
+
+def next_id(tasks):
+    return max((t["id"] for t in tasks), default=0) + 1
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    """Add string to window, properly truncated for display width."""
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+def textbox_input(stdscr, y, x, width, prompt="", initial=""):
+    """Text input on curses screen."""
+    curses.curs_set(1)
+    h, w = stdscr.getmaxyx()
+    prompt_w = str_width(prompt)
+    safe_addstr(stdscr, y, x, prompt, w - x)
+    input_x = x + prompt_w
+    max_cols = min(width - prompt_w - 1, w - input_x - 1)
+
+    buf = list(initial)
+    pos = len(buf)
+    scroll = 0
+
+    while True:
+        visible = ""
+        vis_w = 0
+        cursor_col = 0
+
+        for i in range(scroll, len(buf)):
+            cw = char_width(buf[i])
+            if vis_w + cw > max_cols:
+                break
+            visible += buf[i]
+            vis_w += cw
+            if i < pos:
+                cursor_col += cw
+
+        if pos == scroll:
+            cursor_col = 0
+
+        if pos < scroll:
+            scroll = pos
+            continue
+        if cursor_col >= max_cols:
+            scroll += 1
+            continue
+
+        pad = " " * max(0, max_cols - vis_w)
+        try:
+            stdscr.addstr(y, input_x, visible + pad)
+            stdscr.move(y, input_x + cursor_col)
+        except curses.error:
+            pass
+        stdscr.refresh()
+
+        ch = stdscr.get_wch()
+
+        if ch == "\n" or ch == curses.KEY_ENTER:
+            break
+        elif ch == "\x1b":  # ESC
+            curses.curs_set(0)
+            return None
+        elif ch in ("\x7f", "\b", curses.KEY_BACKSPACE):
+            if pos > 0:
+                buf.pop(pos - 1)
+                pos -= 1
+                if scroll > 0:
+                    scroll = max(0, scroll - 1)
+        elif ch == curses.KEY_DC:
+            if pos < len(buf):
+                buf.pop(pos)
+        elif ch == curses.KEY_LEFT:
+            if pos > 0:
+                pos -= 1
+        elif ch == curses.KEY_RIGHT:
+            if pos < len(buf):
+                pos += 1
+        elif ch == curses.KEY_HOME or ch == "\x01":
+            pos = 0
+            scroll = 0
+        elif ch == curses.KEY_END or ch == "\x05":
+            pos = len(buf)
+        elif ch == "\x15":  # Ctrl-U
+            buf = buf[pos:]
+            pos = 0
+            scroll = 0
+        elif ch == "\x0b":  # Ctrl-K
+            buf = buf[:pos]
+        elif isinstance(ch, str) and len(ch) == 1 and ch >= " ":
+            buf.insert(pos, ch)
+            pos += 1
+
+    curses.curs_set(0)
+    return "".join(buf)
+
+
+def detail_editor(stdscr, task):
+    """Fullscreen detail/memo editor."""
+    curses.curs_set(1)
+    h, w = stdscr.getmaxyx()
+
+    lines = (task.get("detail") or "").split("\n")
+    if lines == [""]:
+        lines = [""]
+    cy, cx = 0, 0
+    scroll = 0
+
+    while True:
+        stdscr.erase()
+        header = f" {ICON_TASK} Detail: {task['title']} "
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+        safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+        edit_top = 2
+        visible_lines = h - edit_top - 2
+
+        if cy - scroll >= visible_lines:
+            scroll = cy - visible_lines + 1
+        if cy < scroll:
+            scroll = cy
+
+        for i in range(visible_lines):
+            li = scroll + i
+            row = edit_top + i
+            if li < len(lines):
+                safe_addstr(stdscr, row, 0, lines[li], w - 1)
+
+        footer = " Alt+Enter:Save  ESC:Cancel "
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1, curses.A_REVERSE)
+
+        screen_y = edit_top + cy - scroll
+        screen_x = str_width(lines[cy][:cx]) if cy < len(lines) else 0
+        screen_x = min(screen_x, w - 1)
+        try:
+            stdscr.move(screen_y, screen_x)
+        except curses.error:
+            pass
+        stdscr.refresh()
+
+        ch = stdscr.get_wch()
+
+        if ch == "\x1b":  # ESC - check for Alt+Enter
+            stdscr.nodelay(True)
+            next_ch = None
+            try:
+                next_ch = stdscr.get_wch()
+            except curses.error:
+                pass
+            stdscr.nodelay(False)
+            if next_ch == "\n" or next_ch == "\r":
+                curses.curs_set(0)
+                return "\n".join(lines)
+            else:
+                curses.curs_set(0)
+                return None
+        elif ch == "\n" or ch == curses.KEY_ENTER:
+            rest = lines[cy][cx:]
+            lines[cy] = lines[cy][:cx]
+            lines.insert(cy + 1, rest)
+            cy += 1
+            cx = 0
+        elif ch in ("\x7f", "\b", curses.KEY_BACKSPACE):
+            if cx > 0:
+                lines[cy] = lines[cy][: cx - 1] + lines[cy][cx:]
+                cx -= 1
+            elif cy > 0:
+                cx = len(lines[cy - 1])
+                lines[cy - 1] += lines[cy]
+                lines.pop(cy)
+                cy -= 1
+        elif ch == curses.KEY_DC:
+            if cx < len(lines[cy]):
+                lines[cy] = lines[cy][:cx] + lines[cy][cx + 1 :]
+            elif cy < len(lines) - 1:
+                lines[cy] += lines[cy + 1]
+                lines.pop(cy + 1)
+        elif ch == curses.KEY_UP:
+            if cy > 0:
+                cy -= 1
+                cx = min(cx, len(lines[cy]))
+        elif ch == curses.KEY_DOWN:
+            if cy < len(lines) - 1:
+                cy += 1
+                cx = min(cx, len(lines[cy]))
+        elif ch == curses.KEY_LEFT:
+            if cx > 0:
+                cx -= 1
+            elif cy > 0:
+                cy -= 1
+                cx = len(lines[cy])
+        elif ch == curses.KEY_RIGHT:
+            if cx < len(lines[cy]):
+                cx += 1
+            elif cy < len(lines) - 1:
+                cy += 1
+                cx = 0
+        elif ch == curses.KEY_HOME or ch == "\x01":
+            cx = 0
+        elif ch == curses.KEY_END or ch == "\x05":
+            cx = len(lines[cy])
+        elif isinstance(ch, str) and len(ch) == 1 and ch >= " ":
+            lines[cy] = lines[cy][:cx] + ch + lines[cy][cx:]
+            cx += 1
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+
+    tasks = load_tasks()
+    cursor = 0
+    message = ""
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        # Header
+        total = len(tasks)
+        done_count = sum(1 for t in tasks if t["done"])
+        header = f" {ICON_TASK} Tasks ({total})"
+        if done_count:
+            header += f"  {ICON_CHECK} {done_count}"
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        sep = "─" * (w - 1)
+        safe_addstr(stdscr, 1, 0, sep, w - 1)
+
+        # Task list - only show detail for focused task
+        row = 2
+        for i, task in enumerate(tasks):
+            if row >= h - 2:
+                break
+            icon = ICON_CHECK if task["done"] else ICON_EMPTY
+            prefix = f" {ICON_CURSOR} " if i == cursor else "   "
+            line = f"{prefix}{task['id']:>2}. {icon}  {task['title']}"
+            attr = curses.A_REVERSE if i == cursor else 0
+            if task["done"]:
+                attr |= curses.A_DIM
+            pad_needed = w - 1 - str_width(line)
+            if pad_needed > 0:
+                line += " " * pad_needed
+            safe_addstr(stdscr, row, 0, line, w - 1, attr)
+            row += 1
+
+            # Show detail only for the focused task
+            if i == cursor and task.get("detail"):
+                detail_lines = task["detail"].split("\n")
+                for di, dl in enumerate(detail_lines):
+                    if row >= h - 2:
+                        break
+                    connector = "└ " if di == len(detail_lines) - 1 else "├ "
+                    dline = f"       {connector}{dl}"
+                    safe_addstr(stdscr, row, 0, dline, w - 1, curses.A_DIM)
+                    row += 1
+
+        # Bottom separator
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, sep, w - 1)
+
+        # Footer
+        if message:
+            footer = f" {message}"
+        else:
+            footer = " a:Add  d:Done  x:Del  e:Edit  Enter:Detail  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+        message = ""
+
+        ch = stdscr.getch()
+
+        if ch == ord("q"):
+            break
+        elif ch == ord("j") or ch == curses.KEY_DOWN:
+            if tasks and cursor < len(tasks) - 1:
+                cursor += 1
+        elif ch == ord("k") or ch == curses.KEY_UP:
+            if cursor > 0:
+                cursor -= 1
+        elif ch == ord("g"):
+            cursor = 0
+        elif ch == ord("G"):
+            if tasks:
+                cursor = len(tasks) - 1
+        elif ch == ord("d"):
+            if tasks:
+                tasks[cursor]["done"] = not tasks[cursor]["done"]
+                save_tasks(tasks)
+        elif ch == ord("x"):
+            if tasks:
+                title = tasks[cursor]["title"]
+                prompt = f" Delete '{title}'? (y/n) "
+                pad = " " * max(0, w - 1 - str_width(prompt))
+                safe_addstr(stdscr, h - 1, 0, prompt + pad, w - 1, curses.A_REVERSE)
+                stdscr.refresh()
+                confirm = stdscr.getch()
+                if confirm == ord("y"):
+                    tasks.pop(cursor)
+                    if cursor >= len(tasks) and cursor > 0:
+                        cursor -= 1
+                    save_tasks(tasks)
+                    message = "Deleted"
+                else:
+                    message = "Cancelled"
+        elif ch == ord("a"):
+            title = textbox_input(stdscr, h - 1, 0, w, " New: ")
+            if title and title.strip():
+                tasks.append(
+                    {
+                        "id": next_id(tasks),
+                        "title": title.strip(),
+                        "done": False,
+                        "detail": "",
+                        "created": str(date.today()),
+                    }
+                )
+                cursor = len(tasks) - 1
+                save_tasks(tasks)
+                message = "Added"
+        elif ch == ord("e"):
+            if tasks:
+                old = tasks[cursor]["title"]
+                new_title = textbox_input(stdscr, h - 1, 0, w, " Edit: ", old)
+                if new_title is not None and new_title.strip():
+                    tasks[cursor]["title"] = new_title.strip()
+                    save_tasks(tasks)
+                    message = "Updated"
+        elif ch == ord("\n") or ch == curses.KEY_ENTER:
+            if tasks:
+                result = detail_editor(stdscr, tasks[cursor])
+                if result is not None:
+                    tasks[cursor]["detail"] = result
+                    save_tasks(tasks)
+                    message = "Detail saved"
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)

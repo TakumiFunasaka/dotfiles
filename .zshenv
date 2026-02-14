@@ -12,3 +12,6 @@ if command -v mise &> /dev/null; then
   eval "$(mise activate zsh)"
 fi
 
+# dotfiles bin
+export PATH="$HOME/dotfiles/bin:$PATH"
+
