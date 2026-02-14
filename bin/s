@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""s - Server/port monitor TUI"""
+
+import curses
+import subprocess
+import time
+import unicodedata
+
+ICON_SERVER = "\uf233"  # 
+ICON_PORT = "\uf1e6"    # 
+
+WELL_KNOWN = {
+    "22": "ssh", "80": "http", "443": "https",
+    "3000": "dev", "3001": "dev", "4000": "dev",
+    "5000": "flask", "5173": "vite", "5432": "postgres",
+    "6379": "redis", "8000": "django", "8080": "proxy",
+    "8888": "jupyter", "9090": "prometheus", "27017": "mongo",
+}
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+# ── Port scanning ──────────────────────────────────────────────
+
+
+def get_listening_ports():
+    """Get list of listening TCP ports with process info."""
+    ports = []
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-iTCP", "-sTCP:LISTEN", "-nP", "-F", "pcn"],
+            stderr=subprocess.DEVNULL, text=True, timeout=5,
+        )
+        pid = ""
+        cmd = ""
+        for line in out.strip().split("\n"):
+            if not line:
+                continue
+            if line.startswith("p"):
+                pid = line[1:]
+            elif line.startswith("c"):
+                cmd = line[1:]
+            elif line.startswith("n"):
+                addr = line[1:]
+                # Extract port from address like *:3000 or 127.0.0.1:8080
+                if ":" in addr:
+                    port = addr.rsplit(":", 1)[-1]
+                    host = addr.rsplit(":", 1)[0]
+                    ports.append({
+                        "port": port,
+                        "host": host,
+                        "pid": pid,
+                        "cmd": cmd,
+                    })
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # Deduplicate by port
+    seen = {}
+    for p in ports:
+        key = p["port"]
+        if key not in seen:
+            seen[key] = p
+    result = list(seen.values())
+    result.sort(key=lambda x: int(x["port"]) if x["port"].isdigit() else 0)
+    return result
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+    curses.halfdelay(30)  # 300ms
+
+    ports = []
+    last_scan = 0
+    scan_interval = 3  # seconds
+
+    while True:
+        now = time.time()
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        # Rescan periodically
+        if now - last_scan >= scan_interval:
+            ports = get_listening_ports()
+            last_scan = now
+
+        # ── Header ──
+        left = f" {ICON_SERVER} Ports"
+        right = f" {len(ports)} listening"
+        gap = w - 1 - str_width(left) - len(right)
+        header = left + " " * max(1, gap) + right
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        # ── Separator ──
+        if h > 1:
+            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+        # ── Port list ──
+        if not ports:
+            safe_addstr(stdscr, 2, 0, " No listening ports", w - 1)
+        else:
+            for i, p in enumerate(ports):
+                row = 2 + i
+                if row >= h - 2:
+                    break
+                port = p["port"]
+                cmd = p["cmd"]
+                host = p["host"]
+                hint = WELL_KNOWN.get(port, "")
+
+                if host in ("*", "0.0.0.0", "[::]", ""):
+                    host_str = "*"
+                elif host in ("127.0.0.1", "[::1]"):
+                    host_str = "localhost"
+                else:
+                    host_str = host
+
+                left_part = f" {ICON_PORT} :{port}"
+                mid_part = f"  {cmd}"
+                if hint and hint != cmd.lower():
+                    mid_part += f" ({hint})"
+                right_part = f"  {host_str}"
+
+                line = left_part + mid_part + right_part
+                safe_addstr(stdscr, row, 0, line, w - 1)
+
+        # ── Bottom separator ──
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+
+        # ── Footer ──
+        footer = " r:Refresh  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+
+        try:
+            ch = stdscr.getch()
+        except curses.error:
+            continue
+
+        if ch == -1:
+            continue
+        elif ch == ord("q"):
+            break
+        elif ch == ord("r"):
+            last_scan = 0  # force rescan
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)

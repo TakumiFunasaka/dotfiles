@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""h - Health reminder TUI (matched with focus app reminders)"""
+
+import curses
+import json
+import os
+import time
+import unicodedata
+from datetime import datetime
+
+STATE_FILE = os.path.expanduser("~/.health_reminders.json")
+
+# Reminder types (matching focus app)
+REMINDER_TYPES = [
+    {"key": "water",       "icon": "\uf043",  "label": "水を飲む",       "title": "水分補給の時間です",       "msg": "コップ1杯の水を飲みましょう"},
+    {"key": "medicine",    "icon": "\uf0f1",  "label": "薬を飲む",       "title": "お薬の時間です",           "msg": "お薬を飲みましょう"},
+    {"key": "supplement",  "icon": "\uf469",  "label": "サプリを飲む",   "title": "サプリメントの時間です",   "msg": "サプリメントを飲みましょう"},
+    {"key": "exercise",    "icon": "\uf44b",  "label": "運動をする",     "title": "運動の時間です",           "msg": "運動で体を動かしましょう"},
+    {"key": "temperature", "icon": "\uf2c9",  "label": "体温を測る",     "title": "体温測定の時間です",       "msg": "体温を測りましょう"},
+    {"key": "stand",       "icon": "\uf183",  "label": "立ち上がる",     "title": "立ち上がりましょう",       "msg": "少し体を動かして、血行を良くしましょう"},
+    {"key": "rest",        "icon": "\uf070",  "label": "目を休める",     "title": "目を休めましょう",         "msg": "20秒間、遠くを見て目を休ませましょう"},
+]
+
+ICON_CHECK = "\uf00c"
+ICON_CURSOR = "\uf054"
+ICON_HEALTH = "\uf21e"  # 
+SNOOZE_MINS = 30
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+# ── State management ──────────────────────────────────────────
+
+
+def default_reminders():
+    return [
+        {"type": "water",  "times": ["10:00", "12:00", "15:00", "17:00"], "enabled": True},
+        {"type": "stand",  "times": ["11:00", "14:00", "16:00"], "enabled": True},
+        {"type": "rest",   "times": ["10:30", "14:30", "16:30"], "enabled": True},
+    ]
+
+
+def load_state():
+    today = datetime.now().strftime("%Y-%m-%d")
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        # Daily reset
+        if state.get("date") != today:
+            state["date"] = today
+            state["done"] = {}
+            state["snoozed"] = {}
+            save_state(state)
+        return state
+    state = {
+        "date": today,
+        "reminders": default_reminders(),
+        "done": {},
+        "snoozed": {},
+    }
+    save_state(state)
+    return state
+
+
+def save_state(state):
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def get_type_info(key):
+    for rt in REMINDER_TYPES:
+        if rt["key"] == key:
+            return rt
+    return REMINDER_TYPES[0]
+
+
+def build_timeline(state):
+    """Build flat list of (time_str, type_key, done, snoozed_until) sorted by time."""
+    timeline = []
+    for rem in state.get("reminders", []):
+        if not rem.get("enabled"):
+            continue
+        for t in rem.get("times", []):
+            rkey = f"{rem['type']}_{t}"
+            done = state.get("done", {}).get(rkey, False)
+            snoozed = state.get("snoozed", {}).get(rkey, "")
+            timeline.append((t, rem["type"], done, snoozed, rkey))
+    timeline.sort(key=lambda x: x[0])
+    return timeline
+
+
+def check_alerts(timeline):
+    """Return list of (rkey, type_key) that are due now."""
+    now = datetime.now()
+    now_str = now.strftime("%H:%M")
+    alerts = []
+    for t, type_key, done, snoozed, rkey in timeline:
+        if done:
+            continue
+        if snoozed:
+            if now_str < snoozed:
+                continue
+        if t <= now_str:
+            alerts.append((rkey, type_key))
+    return alerts
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+    curses.halfdelay(10)  # 100ms
+
+    state = load_state()
+    cursor = 0
+    message = ""
+    last_beep = 0
+
+    while True:
+        now = time.time()
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        timeline = build_timeline(state)
+        alerts = check_alerts(timeline)
+
+        # Beep for alerts (once per minute)
+        if alerts and now - last_beep > 60:
+            curses.beep()
+            print("\a", end="", flush=True)
+            last_beep = now
+
+        # ── Header ──
+        now_str = datetime.now().strftime("%H:%M")
+        done_count = sum(1 for _, _, d, _, _ in timeline if d)
+        total = len(timeline)
+        left = f" {ICON_HEALTH} Health  {now_str}"
+        right = f" {ICON_CHECK} {done_count}/{total}"
+        gap = w - 1 - str_width(left) - str_width(right)
+        header = left + " " * max(1, gap) + right
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        # ── Separator ──
+        if h > 1:
+            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+        # ── Alert banner ──
+        banner_row = 2
+        if alerts:
+            rkey, type_key = alerts[0]
+            info = get_type_info(type_key)
+            banner = f" {info['icon']}  {info['title']}"
+            safe_addstr(stdscr, banner_row, 0, banner, w - 1, curses.A_BOLD)
+            safe_addstr(stdscr, banner_row + 1, 0, f"    {info['msg']}", w - 1)
+            safe_addstr(stdscr, banner_row + 2, 0, "─" * (w - 1), w - 1)
+            list_top = banner_row + 3
+        else:
+            list_top = banner_row
+
+        # ── Timeline ──
+        list_h = h - list_top - 2
+        if cursor >= len(timeline):
+            cursor = max(0, len(timeline) - 1)
+
+        for i, (t, type_key, done, snoozed, rkey) in enumerate(timeline):
+            row = list_top + i
+            if row >= h - 2:
+                break
+            info = get_type_info(type_key)
+            prefix = f" {ICON_CURSOR} " if i == cursor else "   "
+
+            if done:
+                status = f"{ICON_CHECK} "
+            elif snoozed:
+                status = f"~{snoozed} "
+            else:
+                status = "  "
+
+            line = f"{prefix}{t}  {info['icon']}  {status}{info['label']}"
+            attr = 0
+            if i == cursor:
+                attr = curses.A_REVERSE
+            if done:
+                attr |= curses.A_DIM
+            safe_addstr(stdscr, row, 0, line, w - 1, attr)
+
+        if not timeline:
+            safe_addstr(stdscr, list_top, 0, " No reminders set", w - 1)
+
+        # ── Bottom separator ──
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+
+        # ── Footer ──
+        if message:
+            footer = f" {message}"
+        else:
+            footer = " d:Done  z:Snooze(30m)  u:Undo  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+        message = ""
+
+        try:
+            ch = stdscr.getch()
+        except curses.error:
+            continue
+
+        if ch == -1:
+            continue
+        elif ch == ord("q"):
+            break
+        elif ch == ord("j") or ch == curses.KEY_DOWN:
+            if timeline and cursor < len(timeline) - 1:
+                cursor += 1
+        elif ch == ord("k") or ch == curses.KEY_UP:
+            if cursor > 0:
+                cursor -= 1
+        elif ch == ord("d"):
+            if timeline:
+                rkey = timeline[cursor][4]
+                state.setdefault("done", {})[rkey] = True
+                if rkey in state.get("snoozed", {}):
+                    del state["snoozed"][rkey]
+                save_state(state)
+                message = "Done!"
+        elif ch == ord("z"):
+            if timeline:
+                rkey = timeline[cursor][4]
+                now_dt = datetime.now()
+                snooze_h = now_dt.hour + (now_dt.minute + SNOOZE_MINS) // 60
+                snooze_m = (now_dt.minute + SNOOZE_MINS) % 60
+                snooze_str = f"{snooze_h:02d}:{snooze_m:02d}"
+                state.setdefault("snoozed", {})[rkey] = snooze_str
+                save_state(state)
+                message = f"Snoozed until {snooze_str}"
+        elif ch == ord("u"):
+            if timeline:
+                rkey = timeline[cursor][4]
+                if rkey in state.get("done", {}):
+                    del state["done"][rkey]
+                if rkey in state.get("snoozed", {}):
+                    del state["snoozed"][rkey]
+                save_state(state)
+                message = "Reset"
+        elif ch == ord("g"):
+            cursor = 0
+        elif ch == ord("G"):
+            if timeline:
+                cursor = len(timeline) - 1
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)

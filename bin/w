@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""w - File watcher TUI (monitors file changes in current directory)"""
+
+import curses
+import os
+import time
+import unicodedata
+from datetime import datetime
+from pathlib import Path
+
+# Nerd Font icons
+ICON_FILE = "\uf15c"   # 
+ICON_DIR = "\uf07b"    # 
+ICON_ADD = "\uf067"    # 
+ICON_MOD = "\uf040"    # 
+ICON_DEL = "\uf1f8"    # 
+ICON_EYE = "\uf06e"    # 
+
+IGNORE_DIRS = {".git", "node_modules", "__pycache__", ".next", ".cache", "dist", "build", ".DS_Store"}
+MAX_EVENTS = 200
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+# ── File scanning ──────────────────────────────────────────────
+
+
+def should_ignore(path):
+    parts = Path(path).parts
+    return any(p in IGNORE_DIRS for p in parts)
+
+
+def scan_files(root):
+    """Return dict of {relative_path: mtime}."""
+    result = {}
+    try:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+            for f in filenames:
+                if f.startswith("."):
+                    continue
+                full = os.path.join(dirpath, f)
+                rel = os.path.relpath(full, root)
+                if should_ignore(rel):
+                    continue
+                try:
+                    result[rel] = os.path.getmtime(full)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return result
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+    curses.halfdelay(20)  # 200ms
+
+    root = os.getcwd()
+    prev_snapshot = scan_files(root)
+    events = []
+    scroll = 0
+    paused = False
+    event_count = 0
+
+    while True:
+        now = time.time()
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        # Scan for changes
+        if not paused:
+            curr_snapshot = scan_files(root)
+
+            for path, mtime in curr_snapshot.items():
+                if path not in prev_snapshot:
+                    events.append((now, "+", path))
+                    event_count += 1
+                elif mtime != prev_snapshot[path]:
+                    events.append((now, "M", path))
+                    event_count += 1
+
+            for path in prev_snapshot:
+                if path not in curr_snapshot:
+                    events.append((now, "D", path))
+                    event_count += 1
+
+            prev_snapshot = curr_snapshot
+
+            if len(events) > MAX_EVENTS:
+                events = events[-MAX_EVENTS:]
+
+        # ── Header ──
+        dir_name = os.path.basename(root)
+        status = "PAUSED" if paused else "watching"
+        left = f" {ICON_EYE} {dir_name}  ({status})"
+        right = f" {event_count} changes"
+        gap = w - 1 - str_width(left) - len(right)
+        header = left + " " * max(1, gap) + right
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        # ── Separator ──
+        if h > 1:
+            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+        # ── Events ──
+        list_h = h - 4
+        visible = events[-(list_h + scroll):][:list_h] if scroll else events[-list_h:]
+        for i, (ts, kind, path) in enumerate(visible):
+            row = 2 + i
+            if row >= h - 2:
+                break
+            time_str = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+            if kind == "+":
+                icon = ICON_ADD
+                label = "+"
+            elif kind == "M":
+                icon = ICON_MOD
+                label = "M"
+            else:
+                icon = ICON_DEL
+                label = "D"
+            line = f" {time_str}  {label} {path}"
+            safe_addstr(stdscr, row, 0, line, w - 1)
+
+        if not events:
+            safe_addstr(stdscr, 2, 0, " Waiting for changes...", w - 1)
+
+        # ── Bottom separator ──
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+
+        # ── Footer ──
+        footer = " p:Pause  c:Clear  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+
+        try:
+            ch = stdscr.getch()
+        except curses.error:
+            continue
+
+        if ch == -1:
+            continue
+        elif ch == ord("q"):
+            break
+        elif ch == ord("p"):
+            paused = not paused
+        elif ch == ord("c"):
+            events.clear()
+            event_count = 0
+            scroll = 0
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)

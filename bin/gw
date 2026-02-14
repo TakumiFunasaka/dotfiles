@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""g - Git watcher TUI (auto-refreshing git status monitor)"""
+
+import curses
+import subprocess
+import time
+import unicodedata
+
+ICON_GIT = "\ue725"     # 
+ICON_BRANCH = "\ue0a0"  # 
+ICON_CURSOR = "\uf054"  # 
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+# ── Git commands ──────────────────────────────────────────────
+
+
+def git_cmd(args):
+    try:
+        out = subprocess.check_output(
+            ["git"] + args,
+            stderr=subprocess.DEVNULL, text=True, timeout=5,
+        )
+        return out.strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+
+
+def get_branch():
+    return git_cmd(["branch", "--show-current"]) or git_cmd(["rev-parse", "--short", "HEAD"])
+
+
+def get_ahead_behind():
+    out = git_cmd(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
+    if out:
+        parts = out.split()
+        if len(parts) == 2:
+            return int(parts[0]), int(parts[1])
+    return 0, 0
+
+
+def get_status():
+    """Return list of (status_code, filepath)."""
+    out = git_cmd(["status", "--porcelain=v1"])
+    if not out:
+        return []
+    files = []
+    for line in out.split("\n"):
+        if len(line) < 4:
+            continue
+        xy = line[:2]
+        path = line[3:]
+        files.append((xy, path))
+    return files
+
+
+def get_stash_count():
+    out = git_cmd(["stash", "list"])
+    if not out:
+        return 0
+    return len(out.split("\n"))
+
+
+def is_git_repo():
+    return git_cmd(["rev-parse", "--is-inside-work-tree"]) == "true"
+
+
+def status_label(xy):
+    """Convert porcelain status to readable label."""
+    x, y = xy[0], xy[1]
+    if xy == "??":
+        return "?"
+    if xy == "!!":
+        return "!"
+    if x == "A" or y == "A":
+        return "+"
+    if x == "D" or y == "D":
+        return "D"
+    if x == "R" or y == "R":
+        return "R"
+    if x == "M" or y == "M":
+        return "M"
+    if x == "C" or y == "C":
+        return "C"
+    return xy.strip()
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+    curses.halfdelay(20)  # 200ms
+
+    if not is_git_repo():
+        stdscr.addstr(0, 0, "Not a git repository. Press q to quit.")
+        stdscr.refresh()
+        while True:
+            ch = stdscr.getch()
+            if ch == ord("q"):
+                return
+
+    files = []
+    branch = ""
+    ahead, behind = 0, 0
+    stashes = 0
+    last_scan = 0
+    scan_interval = 2
+    cursor = 0
+    paused = False
+
+    while True:
+        now = time.time()
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        # Rescan
+        if not paused and now - last_scan >= scan_interval:
+            branch = get_branch()
+            ahead, behind = get_ahead_behind()
+            files = get_status()
+            stashes = get_stash_count()
+            last_scan = now
+
+        # ── Header ──
+        left = f" {ICON_GIT} {ICON_BRANCH} {branch}"
+        indicators = []
+        if ahead:
+            indicators.append(f"⇡{ahead}")
+        if behind:
+            indicators.append(f"⇣{behind}")
+        if stashes:
+            indicators.append(f"stash:{stashes}")
+        if paused:
+            indicators.append("PAUSED")
+        right = "  ".join(indicators)
+        gap = w - 1 - str_width(left) - str_width(right)
+        header = left + " " * max(1, gap) + right
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        # ── Separator ──
+        if h > 1:
+            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+        # ── Summary line ──
+        staged = sum(1 for xy, _ in files if xy[0] not in (" ", "?", "!"))
+        modified = sum(1 for xy, _ in files if xy[1] in ("M", "D", "A") and xy[0] != "?")
+        untracked = sum(1 for xy, _ in files if xy == "??")
+        summary_parts = []
+        if staged:
+            summary_parts.append(f"+{staged}")
+        if modified:
+            summary_parts.append(f"!{modified}")
+        if untracked:
+            summary_parts.append(f"?{untracked}")
+        summary = " " + "  ".join(summary_parts) if summary_parts else " Clean"
+        safe_addstr(stdscr, 2, 0, summary, w - 1)
+
+        # ── Separator ──
+        if h > 3:
+            safe_addstr(stdscr, 3, 0, "─" * (w - 1), w - 1)
+
+        # ── File list ──
+        list_top = 4
+        list_h = h - list_top - 2
+        if not files:
+            safe_addstr(stdscr, list_top, 0, " No changes", w - 1)
+        else:
+            if cursor >= len(files):
+                cursor = len(files) - 1
+
+            # Scroll offset
+            scroll = 0
+            if cursor >= list_h:
+                scroll = cursor - list_h + 1
+
+            for i in range(min(list_h, len(files) - scroll)):
+                idx = scroll + i
+                row = list_top + i
+                xy, path = files[idx]
+                label = status_label(xy)
+                prefix = f" {ICON_CURSOR} " if idx == cursor else "   "
+                line = f"{prefix}{label}  {path}"
+                attr = curses.A_REVERSE if idx == cursor else 0
+                safe_addstr(stdscr, row, 0, line, w - 1, attr)
+
+        # ── Bottom separator ──
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+
+        # ── Footer ──
+        footer = " j/k:Move  p:Pause  r:Refresh  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+
+        try:
+            ch = stdscr.getch()
+        except curses.error:
+            continue
+
+        if ch == -1:
+            continue
+        elif ch == ord("q"):
+            break
+        elif ch == ord("p"):
+            paused = not paused
+        elif ch == ord("r"):
+            last_scan = 0
+        elif ch == ord("j") or ch == curses.KEY_DOWN:
+            if files and cursor < len(files) - 1:
+                cursor += 1
+        elif ch == ord("k") or ch == curses.KEY_UP:
+            if cursor > 0:
+                cursor -= 1
+        elif ch == ord("g"):
+            cursor = 0
+        elif ch == ord("G"):
+            if files:
+                cursor = len(files) - 1
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)
