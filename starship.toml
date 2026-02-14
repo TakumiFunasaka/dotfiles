@@ -4,9 +4,8 @@
 # ============================================================================
 
 # プロンプトのフォーマット
-format = """
-[╭─](bold green)$directory$git_branch$git_status$git_state
-[╰─](bold green)$character"""
+format = """$directory$git_branch$git_status$git_state
+$character"""
 
 # 右側のプロンプト
 right_format = """$cmd_duration$nodejs$python$rust$golang"""
