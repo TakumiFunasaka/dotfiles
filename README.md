@@ -45,6 +45,7 @@ mise use -g go@latest
    - Left Option key を `Esc+` に変更
 4. `Profiles` > `Terminal`
    - Scrollback lines を `10000` 以上に
+   - `Enable mouse reporting` をチェック
 5. `Profiles` > `Window`
    - Columns: `200`, Rows: `50` 程度に
 
@@ -59,17 +60,23 @@ dotfiles/
 ├── .zprofile               # ログイン時の設定（XDG、PATH）
 ├── .gitconfig              # Git設定（エイリアス、delta連携）
 ├── .gitignore_global       # グローバルgitignore
-├── .tmux.conf              # tmux設定
+├── .tmux.conf              # tmux設定（prefix: Ctrl+a）
 ├── .tmux/
 │   └── dev-layout.conf     # 開発用レイアウト（エディタ+Claude Code+ターミナル）
 ├── starship.toml           # Starshipプロンプト設定
 ├── nvim/
-│   └── init.lua            # Neovim設定（lazy.nvim + プラグイン）
+│   ├── init.lua            # Neovim設定（lazy.nvim + プラグイン）
+│   └── lazy-lock.json      # プラグインバージョンロック
 ├── bat/
-│   └── config              # bat設定（Catppuccin テーマ）
+│   └── config              # bat設定（gruvbox-dark テーマ）
 ├── bin/
 │   ├── t                   # タスク管理TUI
-│   └── n                   # メモ/ノートTUI（2ペイン）
+│   ├── n                   # メモ/ノートTUI（2ペイン）
+│   ├── p                   # ポモドーロタイマーTUI
+│   ├── w                   # ファイルウォッチャーTUI
+│   ├── s                   # サーバー/ポートモニターTUI
+│   ├── gw                  # Gitウォッチャー TUI
+│   └── h                   # ヘルスリマインダーTUI
 ├── gruvbox-dark.itermcolors      # iTerm2カラープリセット
 ├── Brewfile                # Homebrewパッケージ定義
 ├── install.sh              # インストールスクリプト
@@ -90,6 +97,7 @@ dotfiles/
 | `starship.toml` | `~/.config/starship.toml` |
 | `nvim/` | `~/.config/nvim/` |
 | `bat/config` | `~/.config/bat/config` |
+| `bin/` | `~/dotfiles/bin/` (PATH に追加済み) |
 
 ---
 
@@ -121,7 +129,9 @@ dotfiles/
 
 ### prefix キー
 
-全ての tmux 操作は **`Ctrl+s` の後にキーを押す**2段階操作。以下 `prefix` = `Ctrl+s`。
+全ての tmux 操作は **`Ctrl+a` の後にキーを押す**2段階操作。以下 `prefix` = `Ctrl+a`。
+
+`Ctrl+a` を2回押すと、シェルの「行頭移動」としてそのまま送られる。
 
 ### 起動・セッション管理
 
@@ -136,6 +146,7 @@ tmux attach                # 最後のセッションに戻る
 tma                        # fzfでセッション選択してアタッチ (zshrcエイリアス)
 tls                        # セッション一覧 (zshrcエイリアス)
 tks <name>                 # セッション削除 (zshrcエイリアス)
+tmux kill-server           # 全セッションを一括終了
 ```
 
 ### ペイン操作（画面分割）
@@ -264,7 +275,7 @@ Esc               閉じる
 
 | プラグイン | 役割 |
 |---|---|
-| catppuccin | カラースキーム |
+| gruvbox.nvim | カラースキーム (Gruvbox Dark) |
 | neo-tree | ファイルツリー |
 | telescope | ファジーファインダー |
 | treesitter | シンタックスハイライト |
@@ -475,15 +486,15 @@ brew bundle cleanup --file=~/dotfiles/Brewfile
 
 ---
 
-## 自作 CLI ツール (`~/dotfiles/bin/`)
+## 自作 TUI ツール (`~/dotfiles/bin/`)
 
-### `t` - タスク管理 TUI
+tmux ペインに常駐して使う省スペースな Python curses 製ツール群。Nerd Font アイコン対応。
+
+### `t` - タスク管理
 
 ```bash
 t                              # 起動
 ```
-
-tmux ペインに常駐できる Neo-tree 風タスク管理ツール。
 
 ```
 j/k          カーソル移動
@@ -491,6 +502,8 @@ a            タスク追加
 d            完了トグル
 x            削除
 e            タイトル編集
+p            優先度切り替え (none/high/medium/low)
+s            優先度順ソート
 Enter        詳細(メモ)編集 (Alt+Enter保存, ESCキャンセル)
 g/G          先頭/末尾
 q            終了
@@ -498,13 +511,13 @@ q            終了
 
 データ: `~/.tasks.json`
 
-### `n` - メモ/ノート TUI（2ペイン）
+### `n` - メモ/ノート（2ペイン）
 
 ```bash
 n                              # 起動
 ```
 
-Neo-tree + エディタ風の 2 ペイン構成メモアプリ。左にノート一覧、右に本文表示。
+左にノート一覧、右に本文表示の Neo-tree + エディタ風。
 
 ```
 ── 左ペイン ──
@@ -514,6 +527,7 @@ x            削除
 e            タイトル編集
 Enter        本文編集モード (Alt+Enter保存, ESCキャンセル)
 y            本文をクリップボードにコピー
+c            Claude CLI で AI 生成/加筆
 t            テンプレート管理画面
 Tab          右ペインへフォーカス移動
 
@@ -526,7 +540,99 @@ Tab          左ペインへフォーカス移動
 q            終了
 ```
 
-データ: `~/.notes.json` / テンプレート: `~/.note-templates.json`
+データ: `~/.notes/notes/*.md` / テンプレート: `~/.notes/templates/*.md`
+
+### `p` - ポモドーロタイマー
+
+```bash
+p                              # 起動
+```
+
+```
+Space        開始 / 一時停止
+r            リセット
++/-          作業時間を増減（5分刻み）
+q            終了
+```
+
+### `w` - ファイルウォッチャー
+
+```bash
+w                              # 起動（カレントディレクトリを監視）
+```
+
+ファイルの追加・変更・削除をリアルタイムで監視。
+
+```
+p            一時停止 / 再開
+c            ログクリア
+q            終了
+```
+
+### `s` - サーバー/ポートモニター
+
+```bash
+s                              # 起動
+```
+
+TCP リスニングポートとプロセスを一覧表示。自動リフレッシュ。
+
+```
+r            手動リフレッシュ
+q            終了
+```
+
+### `gw` - Git ウォッチャー
+
+```bash
+gw                             # 起動（Gitリポジトリ内で実行）
+```
+
+Git ステータスを自動リフレッシュで監視。ブランチ、ahead/behind、変更ファイルを表示。
+
+```
+j/k          カーソル移動
+p            一時停止 / 再開
+r            手動リフレッシュ
+g/G          先頭/末尾
+q            終了
+```
+
+### `h` - ヘルスリマインダー
+
+```bash
+h                              # 起動
+```
+
+時刻指定のヘルスリマインダー。7種類のリマインダータイプ（水分補給、立ち上がる、目を休める、運動、薬、サプリ、体温測定）。日付が変わると自動リセット。
+
+```
+── メイン画面 ──
+j/k          カーソル移動
+d            完了にする
+z            スヌーズ（30分後に再通知）
+u            完了/スヌーズを取り消し
+s            設定画面を開く
+g/G          先頭/末尾
+q            終了
+
+── 設定画面 ──
+j/k          カーソル移動
+e            有効/無効の切り替え
+a            リマインダータイプを追加
+x            リマインダータイプを削除
+t            時刻編集モード
+ESC          メイン画面に戻る
+
+── 時刻編集モード ──
+j/k          カーソル移動
+a            時刻を追加
+x            時刻を削除
+e            時刻を編集
+ESC          設定画面に戻る
+```
+
+データ: `~/.health_reminders.json`
 
 ---
 
@@ -576,7 +682,8 @@ iTerm2 の `Profiles` > `Terminal` > `Report Terminal Type` が `xterm-256color`
 
 ## 更新履歴
 
-- **2025-02**: tmux 導入、Gruvbox Dark でカラーテーマ統一、nvim に lazy.nvim + プラグイン追加、Claude Code エイリアス追加
+- **2026-02**: TUI ツール群のバグ修正（Nerd Font 幅計算、設定画面の入力モード）、Starship プロンプト簡素化
+- **2025-02**: 自作 TUI ツール追加 (t/n/p/w/s/gw/h)、tmux 導入、Gruvbox Dark でカラーテーマ統一、nvim に lazy.nvim + プラグイン追加、Claude Code エイリアス追加
 - **2025-11**: 2025年版に完全刷新、Cursor サンドボックス対応
 
 ## ライセンス
