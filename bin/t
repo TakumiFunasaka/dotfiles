@@ -15,6 +15,16 @@ ICON_EMPTY = "\uf096"  #
 ICON_CURSOR = "\uf054"  #
 ICON_TASK = "\uf0ae"  #
 
+# Priority levels: 0=none, 1=high, 2=medium, 3=low
+PRIORITIES = ["none", "high", "medium", "low"]
+PRIORITY_ICONS = {
+    "none": " ",
+    "high": "\uf0aa",    #  (arrow up)
+    "medium": "\uf07d",  #  (arrows v)
+    "low": "\uf0ab",     #  (arrow down)
+}
+PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2, "none": 3}
+
 
 def char_width(ch):
     """Return display width of a single character."""
@@ -293,7 +303,9 @@ def main(stdscr):
                 break
             icon = ICON_CHECK if task["done"] else ICON_EMPTY
             prefix = f" {ICON_CURSOR} " if i == cursor else "   "
-            line = f"{prefix}{task['id']:>2}. {icon}  {task['title']}"
+            prio = task.get("priority", "none")
+            picon = PRIORITY_ICONS.get(prio, " ")
+            line = f"{prefix}{task['id']:>2}. {icon} {picon} {task['title']}"
             attr = curses.A_REVERSE if i == cursor else 0
             if task["done"]:
                 attr |= curses.A_DIM
@@ -322,7 +334,7 @@ def main(stdscr):
         if message:
             footer = f" {message}"
         else:
-            footer = " a:Add  d:Done  x:Del  e:Edit  Enter:Detail  q:Quit"
+            footer = " a:Add  d:Done  x:Del  e:Edit  p:Prio  s:Sort  Enter:Detail  q:Quit"
         safe_addstr(stdscr, h - 1, 0, footer, w - 1)
 
         stdscr.refresh()
@@ -386,6 +398,24 @@ def main(stdscr):
                     tasks[cursor]["title"] = new_title.strip()
                     save_tasks(tasks)
                     message = "Updated"
+        elif ch == ord("p"):
+            if tasks:
+                cur_prio = tasks[cursor].get("priority", "none")
+                idx = PRIORITIES.index(cur_prio) if cur_prio in PRIORITIES else 0
+                tasks[cursor]["priority"] = PRIORITIES[(idx + 1) % len(PRIORITIES)]
+                save_tasks(tasks)
+                message = f"Priority: {tasks[cursor]['priority']}"
+        elif ch == ord("s"):
+            if tasks:
+                tasks.sort(
+                    key=lambda t: (
+                        PRIORITY_ORDER.get(t.get("priority", "none"), 3),
+                        t.get("done", False),
+                    )
+                )
+                cursor = 0
+                save_tasks(tasks)
+                message = "Sorted by priority"
         elif ch == ord("\n") or ch == curses.KEY_ENTER:
             if tasks:
                 result = detail_editor(stdscr, tasks[cursor])

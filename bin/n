@@ -2,14 +2,14 @@
 """n - CLI memo/note TUI (2-pane, Neo-tree + editor style)"""
 
 import curses
-import json
 import os
+import re
 import subprocess
 import unicodedata
 from datetime import datetime
 
-NOTES_FILE = os.path.expanduser("~/.notes.json")
-TEMPLATES_FILE = os.path.expanduser("~/.note-templates.json")
+NOTES_DIR = os.path.expanduser("~/.notes/notes")
+TEMPLATES_DIR = os.path.expanduser("~/.notes/templates")
 
 # Nerd Font icons
 ICON_NOTE = "\uf15c"
@@ -17,19 +17,19 @@ ICON_CURSOR = "\uf054"
 ICON_TMPL = "\uf0c5"
 
 
+# ── Display utilities ──────────────────────────────────────────
+
+
 def char_width(ch):
-    """Return display width of a single character."""
     ea = unicodedata.east_asian_width(ch)
     return 2 if ea in ("F", "W") else 1
 
 
 def str_width(s):
-    """Return display width of a string."""
     return sum(char_width(c) for c in s)
 
 
 def truncate_to_width(s, max_w):
-    """Truncate string to fit within max_w display columns."""
     w = 0
     for i, c in enumerate(s):
         cw = char_width(c)
@@ -40,7 +40,6 @@ def truncate_to_width(s, max_w):
 
 
 def safe_addstr(win, y, x, text, max_w, attr=0):
-    """Add string to window, properly truncated for display width."""
     truncated = truncate_to_width(text, max_w)
     try:
         win.addstr(y, x, truncated, attr)
@@ -48,32 +47,145 @@ def safe_addstr(win, y, x, text, max_w, attr=0):
         pass
 
 
-def load_json(path):
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+# ── Markdown note storage ──────────────────────────────────────
 
 
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def sanitize_filename(title):
+    """Convert title to a safe filename component."""
+    s = re.sub(r'[\\/:*?"<>|]', "-", title)
+    s = s.strip().strip(".")
+    return s[:80] if s else "untitled"
+
+
+def md_path(directory, item_id, title):
+    return os.path.join(directory, f"{item_id}_{sanitize_filename(title)}.md")
+
+
+def parse_frontmatter(text):
+    """Parse YAML frontmatter from markdown text. Returns (meta_dict, body)."""
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---\n", 3)
+    if end == -1:
+        return {}, text
+    fm_block = text[4:end]
+    body = text[end + 5:]
+    meta = {}
+    for line in fm_block.split("\n"):
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+    return meta, body
+
+
+def build_frontmatter(meta, keys=("id", "title", "created", "updated")):
+    lines = ["---"]
+    for k in keys:
+        if k in meta:
+            lines.append(f"{k}: {meta[k]}")
+    lines.append("---")
+    return "\n".join(lines)
 
 
 def load_notes():
-    return load_json(NOTES_FILE)
+    """Load all notes from ~/.notes/ directory."""
+    os.makedirs(NOTES_DIR, exist_ok=True)
+    notes = []
+    for fname in os.listdir(NOTES_DIR):
+        if not fname.endswith(".md"):
+            continue
+        fpath = os.path.join(NOTES_DIR, fname)
+        with open(fpath, "r", encoding="utf-8") as f:
+            text = f.read()
+        meta, body = parse_frontmatter(text)
+        if "id" not in meta:
+            continue
+        notes.append({
+            "id": int(meta["id"]),
+            "title": meta.get("title", "untitled"),
+            "body": body,
+            "created": meta.get("created", ""),
+            "updated": meta.get("updated", ""),
+            "_path": fpath,
+        })
+    return notes
 
 
-def save_notes(notes):
-    save_json(NOTES_FILE, notes)
+def save_note(note):
+    """Save a single note as a markdown file."""
+    os.makedirs(NOTES_DIR, exist_ok=True)
+    old_path = note.get("_path")
+    new_path = md_path(NOTES_DIR, note["id"], note["title"])
+    if old_path and old_path != new_path and os.path.exists(old_path):
+        os.remove(old_path)
+    note["_path"] = new_path
+    meta = {
+        "id": str(note["id"]),
+        "title": note["title"],
+        "created": note["created"],
+        "updated": note["updated"],
+    }
+    content = build_frontmatter(meta) + "\n" + note.get("body", "")
+    with open(new_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def delete_note(note):
+    """Delete a note's markdown file."""
+    path = note.get("_path")
+    if path and os.path.exists(path):
+        os.remove(path)
+
+
+# ── Markdown template storage ──────────────────────────────────
 
 
 def load_templates():
-    return load_json(TEMPLATES_FILE)
+    """Load all templates from ~/.note-templates/ directory."""
+    os.makedirs(TEMPLATES_DIR, exist_ok=True)
+    templates = []
+    for fname in os.listdir(TEMPLATES_DIR):
+        if not fname.endswith(".md"):
+            continue
+        fpath = os.path.join(TEMPLATES_DIR, fname)
+        with open(fpath, "r", encoding="utf-8") as f:
+            text = f.read()
+        meta, body = parse_frontmatter(text)
+        if "id" not in meta:
+            continue
+        templates.append({
+            "id": int(meta["id"]),
+            "title": meta.get("title", "untitled"),
+            "body": body,
+            "_path": fpath,
+        })
+    templates.sort(key=lambda t: t["id"])
+    return templates
 
 
-def save_templates(templates):
-    save_json(TEMPLATES_FILE, templates)
+def save_template(tmpl):
+    """Save a single template as a markdown file."""
+    os.makedirs(TEMPLATES_DIR, exist_ok=True)
+    old_path = tmpl.get("_path")
+    new_path = md_path(TEMPLATES_DIR, tmpl["id"], tmpl["title"])
+    if old_path and old_path != new_path and os.path.exists(old_path):
+        os.remove(old_path)
+    tmpl["_path"] = new_path
+    meta = {"id": str(tmpl["id"]), "title": tmpl["title"]}
+    content = build_frontmatter(meta, keys=("id", "title")) + "\n" + tmpl.get("body", "")
+    with open(new_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def delete_template(tmpl):
+    """Delete a template's markdown file."""
+    path = tmpl.get("_path")
+    if path and os.path.exists(path):
+        os.remove(path)
+
+
+
+# ── Utility ────────────────────────────────────────────────────
 
 
 def next_id(items):
@@ -85,7 +197,6 @@ def now_str():
 
 
 def format_date(dt_str):
-    """Format datetime string for display."""
     try:
         dt = datetime.fromisoformat(dt_str)
         return dt.strftime("%m/%d %H:%M")
@@ -93,8 +204,11 @@ def format_date(dt_str):
         return ""
 
 
+def sort_notes(notes):
+    notes.sort(key=lambda n: n.get("updated", ""), reverse=True)
+
+
 def copy_to_clipboard(text):
-    """Copy text to system clipboard via pbcopy."""
     try:
         proc = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
         proc.communicate(text.encode("utf-8"))
@@ -102,13 +216,53 @@ def copy_to_clipboard(text):
         pass
 
 
-def sort_notes(notes):
-    """Sort notes by updated descending."""
-    notes.sort(key=lambda n: n.get("updated", ""), reverse=True)
+def claude_generate(prompt, existing_body=""):
+    """Call claude CLI to generate/augment note content in markdown."""
+    if existing_body:
+        system_prompt = (
+            "あなたはmarkdownノートのライターです。\n"
+            "ユーザーから既存ノートの本文と修正指示を受け取ります。\n"
+            "【厳守ルール】\n"
+            "- 出力はmarkdown形式のノート本文のみ\n"
+            "- 「作成しました」「以下の通りです」等の前置き・後書き・説明文は絶対に含めない\n"
+            "- コードフェンスで全体を囲まない\n"
+            "- 最初の文字からノート本文を開始すること"
+        )
+        user_msg = (
+            f"<existing_note>\n{existing_body}\n</existing_note>\n\n"
+            f"<instruction>\n{prompt}\n</instruction>"
+        )
+    else:
+        system_prompt = (
+            "あなたはmarkdownノートのライターです。\n"
+            "ユーザーの指示に従ってmarkdownノートを作成してください。\n"
+            "【厳守ルール】\n"
+            "- 出力はmarkdown形式のノート本文のみ\n"
+            "- 「作成しました」「以下の通りです」等の前置き・後書き・説明文は絶対に含めない\n"
+            "- コードフェンスで全体を囲まない\n"
+            "- 最初の文字からノート本文を開始すること"
+        )
+        user_msg = prompt
+
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
+    try:
+        proc = subprocess.run(
+            ["claude", "-p", "--output-format", "text",
+             "--system-prompt", system_prompt, user_msg],
+            capture_output=True, text=True, timeout=120, env=env,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+# ── Text input ──────────────────────────────────────────────────
 
 
 def textbox_input(stdscr, y, x, width, prompt="", initial=""):
-    """Text input on curses screen."""
     curses.curs_set(1)
     h, w = stdscr.getmaxyx()
     prompt_w = str_width(prompt)
@@ -192,8 +346,10 @@ def textbox_input(stdscr, y, x, width, prompt="", initial=""):
     return "".join(buf)
 
 
+# ── Body editor (in-pane) ──────────────────────────────────────
+
+
 def body_editor(stdscr, title, body_text, area_top, area_left, area_w, area_h):
-    """In-pane body editor. Returns new body on save (Alt+Enter), None on cancel (ESC)."""
     curses.curs_set(1)
 
     lines = body_text.split("\n") if body_text else [""]
@@ -202,7 +358,6 @@ def body_editor(stdscr, title, body_text, area_top, area_left, area_w, area_h):
     visible_lines = area_h
 
     while True:
-        # Draw body area
         for i in range(visible_lines):
             li = scroll + i
             row = area_top + i
@@ -214,7 +369,6 @@ def body_editor(stdscr, title, body_text, area_top, area_left, area_w, area_h):
             if li < len(lines):
                 safe_addstr(stdscr, row, area_left, lines[li], area_w)
 
-        # Update footer
         h, w = stdscr.getmaxyx()
         footer = " Alt+Enter:Save  ESC:Cancel"
         try:
@@ -224,13 +378,11 @@ def body_editor(stdscr, title, body_text, area_top, area_left, area_w, area_h):
             pass
         safe_addstr(stdscr, h - 1, 0, footer, w - 1)
 
-        # Scroll management
         if cy - scroll >= visible_lines:
             scroll = cy - visible_lines + 1
         if cy < scroll:
             scroll = cy
 
-        # Position cursor
         screen_y = area_top + cy - scroll
         screen_x = area_left + str_width(lines[cy][:cx]) if cy < len(lines) else area_left
         screen_x = min(screen_x, area_left + area_w - 1)
@@ -306,8 +458,10 @@ def body_editor(stdscr, title, body_text, area_top, area_left, area_w, area_h):
             cx += 1
 
 
+# ── Template editor (fullscreen) ───────────────────────────────
+
+
 def template_editor(stdscr, title, body_text):
-    """Fullscreen body editor for templates."""
     curses.curs_set(1)
     h, w = stdscr.getmaxyx()
 
@@ -415,8 +569,10 @@ def template_editor(stdscr, title, body_text):
             cx += 1
 
 
+# ── Template manager ────────────────────────────────────────────
+
+
 def template_manager(stdscr):
-    """Template management screen."""
     templates = load_templates()
     cursor = 0
     message = ""
@@ -478,12 +634,13 @@ def template_manager(stdscr):
             if title and title.strip():
                 body = template_editor(stdscr, title.strip(), "")
                 if body is not None:
-                    templates.append({
+                    tmpl = {
                         "id": next_id(templates),
                         "title": title.strip(),
                         "body": body,
-                    })
-                    save_templates(templates)
+                    }
+                    save_template(tmpl)
+                    templates.append(tmpl)
                     cursor = len(templates) - 1
                     message = "Template added"
         elif ch == ord("x"):
@@ -495,10 +652,10 @@ def template_manager(stdscr):
                 stdscr.refresh()
                 confirm = stdscr.getch()
                 if confirm == ord("y"):
+                    delete_template(templates[cursor])
                     templates.pop(cursor)
                     if cursor >= len(templates) and cursor > 0:
                         cursor -= 1
-                    save_templates(templates)
                     message = "Deleted"
                 else:
                     message = "Cancelled"
@@ -508,54 +665,55 @@ def template_manager(stdscr):
                 body = template_editor(stdscr, tmpl["title"], tmpl["body"])
                 if body is not None:
                     tmpl["body"] = body
-                    save_templates(templates)
+                    save_template(tmpl)
                     message = "Template saved"
 
 
+# ── Main screen drawing ─────────────────────────────────────────
+
+
 def draw_main(stdscr, notes, cursor, left_w, focus, message, editing):
-    """Draw the 2-pane main screen."""
     h, w = stdscr.getmaxyx()
     stdscr.erase()
 
     right_x = left_w + 1
     right_w = w - right_x
 
-    # --- Left pane header ---
+    # Left pane header
     lh = f" {ICON_NOTE} Notes ({len(notes)})"
     stdscr.attron(curses.A_BOLD)
     safe_addstr(stdscr, 0, 0, lh, left_w)
     stdscr.attroff(curses.A_BOLD)
 
-    # --- Right pane header ---
+    # Right pane header
     if notes and 0 <= cursor < len(notes):
         note = notes[cursor]
         rh_title = note["title"]
         rh_date = format_date(note.get("updated", ""))
-        rh_right = rh_date
         rh_left = f" {rh_title}"
-        avail = right_w - str_width(rh_right) - 2
+        avail = right_w - str_width(rh_date) - 2
         rh_left = truncate_to_width(rh_left, avail)
-        gap = right_w - str_width(rh_left) - str_width(rh_right)
-        rh = rh_left + " " * max(1, gap) + rh_right
+        gap = right_w - str_width(rh_left) - str_width(rh_date)
+        rh = rh_left + " " * max(1, gap) + rh_date
     else:
         rh = ""
     stdscr.attron(curses.A_BOLD)
     safe_addstr(stdscr, 0, right_x, rh, right_w)
     stdscr.attroff(curses.A_BOLD)
 
-    # --- Separator line row 1 ---
+    # Separator line row 1
     for col in range(left_w):
         safe_addstr(stdscr, 1, col, "─", 1)
     safe_addstr(stdscr, 1, left_w, "┼", 1)
     for col in range(right_x, w - 1):
         safe_addstr(stdscr, 1, col, "─", 1)
 
-    # --- Vertical separator ---
+    # Vertical separator
     safe_addstr(stdscr, 0, left_w, "│", 1)
     for row in range(2, h - 2):
         safe_addstr(stdscr, row, left_w, "│", 1)
 
-    # --- Left pane: note list ---
+    # Left pane: note list
     list_top = 2
     list_h = h - 4
     for i, note in enumerate(notes):
@@ -572,7 +730,7 @@ def draw_main(stdscr, notes, cursor, left_w, focus, message, editing):
             line += " " * pad_needed
         safe_addstr(stdscr, row, 0, line, left_w, attr)
 
-    # --- Right pane: body preview ---
+    # Right pane: body preview
     if notes and 0 <= cursor < len(notes):
         body = notes[cursor].get("body", "")
         body_lines = body.split("\n") if body else [""]
@@ -581,6 +739,9 @@ def draw_main(stdscr, notes, cursor, left_w, focus, message, editing):
         return body_lines, body_top, body_h, right_x, right_w
     else:
         return [], 2, h - 4, right_x, right_w
+
+
+# ── Main loop ────────────────────────────────────────────────────
 
 
 def main(stdscr):
@@ -592,7 +753,7 @@ def main(stdscr):
     sort_notes(notes)
     cursor = 0
     message = ""
-    focus = "left"  # "left" or "right"
+    focus = "left"
     right_scroll = 0
 
     while True:
@@ -620,12 +781,12 @@ def main(stdscr):
             footer = f" {message}"
         else:
             if focus == "left":
-                footer = " a:Add  x:Del  e:Rename  Enter:Edit  y:Copy  Tab:Switch  t:Tmpl  q:Quit"
+                footer = " a:Add  x:Del  e:Rename  Enter:Edit  y:Copy  c:AI  Tab:Switch  t:Tmpl  q:Quit"
             else:
                 footer = " j/k:Scroll  g/G:Top/Bottom  y:Copy  Tab:Switch  q:Quit"
         safe_addstr(stdscr, h - 1, 0, footer, w - 1)
 
-        # Focus indicator: highlight right pane border if right-focused
+        # Focus indicator
         if focus == "right":
             for row in range(2, h - 2):
                 safe_addstr(stdscr, row, left_w, "│", 1, curses.A_BOLD)
@@ -637,7 +798,7 @@ def main(stdscr):
 
         if ch == ord("q"):
             break
-        elif ch == ord("\t") or ch == 9:  # Tab
+        elif ch == ord("\t") or ch == 9:
             if focus == "left":
                 focus = "right"
                 right_scroll = 0
@@ -660,7 +821,6 @@ def main(stdscr):
                     cursor = len(notes) - 1
                     right_scroll = 0
             elif ch == ord("a"):
-                # Template selection
                 templates = load_templates()
                 if templates:
                     prompt = " [1] Blank"
@@ -671,7 +831,7 @@ def main(stdscr):
                     safe_addstr(stdscr, h - 1, 0, prompt, w - 1)
                     stdscr.refresh()
                     sel = stdscr.getch()
-                    if sel == 27:  # ESC
+                    if sel == 27:
                         continue
                     sel_idx = sel - ord("1") if ord("1") <= sel <= ord("9") else -1
                     if sel_idx == 0:
@@ -686,16 +846,17 @@ def main(stdscr):
                 title = textbox_input(stdscr, h - 1, 0, w, " Title: ")
                 if title and title.strip():
                     ts = now_str()
-                    notes.append({
+                    note = {
                         "id": next_id(notes),
                         "title": title.strip(),
                         "body": template_body,
                         "created": ts,
                         "updated": ts,
-                    })
+                    }
+                    save_note(note)
+                    notes.append(note)
                     sort_notes(notes)
-                    cursor = 0  # newest is at top after sort
-                    save_notes(notes)
+                    cursor = 0
                     message = "Added"
             elif ch == ord("x"):
                 if notes:
@@ -706,10 +867,10 @@ def main(stdscr):
                     stdscr.refresh()
                     confirm = stdscr.getch()
                     if confirm == ord("y"):
+                        delete_note(notes[cursor])
                         notes.pop(cursor)
                         if cursor >= len(notes) and cursor > 0:
                             cursor -= 1
-                        save_notes(notes)
                         message = "Deleted"
                     else:
                         message = "Cancelled"
@@ -719,18 +880,15 @@ def main(stdscr):
                     new_title = textbox_input(stdscr, h - 1, 0, w, " Rename: ", old)
                     if new_title is not None and new_title.strip():
                         notes[cursor]["title"] = new_title.strip()
-                        save_notes(notes)
+                        save_note(notes[cursor])
                         message = "Renamed"
             elif ch == ord("\n") or ch == curses.KEY_ENTER:
                 if notes:
                     note = notes[cursor]
-                    # Redraw to enter edit mode
                     draw_main(stdscr, notes, cursor, left_w, "left", "", True)
-                    # Draw separator + footer will be handled by editor
                     sep = "─" * (w - 1)
                     if h - 2 >= 0:
                         safe_addstr(stdscr, h - 2, 0, sep, w - 1)
-                    # Vertical separator
                     for row in range(2, h - 2):
                         safe_addstr(stdscr, row, left_w, "│", 1)
                     stdscr.refresh()
@@ -744,19 +902,72 @@ def main(stdscr):
                     if result is not None:
                         note["body"] = result
                         note["updated"] = now_str()
+                        save_note(note)
                         sort_notes(notes)
-                        # Find cursor position after sort
                         for i, n in enumerate(notes):
                             if n["id"] == note["id"]:
                                 cursor = i
                                 break
-                        save_notes(notes)
                         message = "Saved"
                     right_scroll = 0
             elif ch == ord("y"):
                 if notes:
                     copy_to_clipboard(notes[cursor].get("body", ""))
                     message = "Copied to clipboard"
+            elif ch == ord("c"):
+                if notes:
+                    safe_addstr(stdscr, h - 1, 0, " " * (w - 1), w - 1)
+                    safe_addstr(stdscr, h - 1, 0, " [1] New note  [2] Augment current ", w - 1)
+                    stdscr.refresh()
+                    mode_ch = stdscr.getch()
+                else:
+                    mode_ch = ord("1")
+
+                if mode_ch == ord("1"):
+                    title = textbox_input(stdscr, h - 1, 0, w, " Title: ")
+                    if title and title.strip():
+                        prompt = textbox_input(stdscr, h - 1, 0, w, " Prompt: ")
+                        if prompt and prompt.strip():
+                            safe_addstr(stdscr, h - 1, 0, " " * (w - 1), w - 1)
+                            safe_addstr(stdscr, h - 1, 0, " Generating...", w - 1)
+                            stdscr.refresh()
+                            result = claude_generate(prompt.strip())
+                            if result:
+                                ts = now_str()
+                                note = {
+                                    "id": next_id(notes),
+                                    "title": title.strip(),
+                                    "body": result,
+                                    "created": ts,
+                                    "updated": ts,
+                                }
+                                save_note(note)
+                                notes.append(note)
+                                sort_notes(notes)
+                                cursor = 0
+                                message = "Generated"
+                            else:
+                                message = "Generation failed"
+                elif mode_ch == ord("2") and notes:
+                    prompt = textbox_input(stdscr, h - 1, 0, w, " Prompt: ")
+                    if prompt and prompt.strip():
+                        safe_addstr(stdscr, h - 1, 0, " " * (w - 1), w - 1)
+                        safe_addstr(stdscr, h - 1, 0, " Generating...", w - 1)
+                        stdscr.refresh()
+                        note = notes[cursor]
+                        result = claude_generate(prompt.strip(), note.get("body", ""))
+                        if result:
+                            note["body"] = result
+                            note["updated"] = now_str()
+                            save_note(note)
+                            sort_notes(notes)
+                            for i, n in enumerate(notes):
+                                if n["id"] == note["id"]:
+                                    cursor = i
+                                    break
+                            message = "Updated by AI"
+                        else:
+                            message = "Generation failed"
             elif ch == ord("t"):
                 template_manager(stdscr)
         elif focus == "right":
