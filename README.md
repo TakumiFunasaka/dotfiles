@@ -67,6 +67,9 @@ dotfiles/
 │   └── init.lua            # Neovim設定（lazy.nvim + プラグイン）
 ├── bat/
 │   └── config              # bat設定（Catppuccin テーマ）
+├── bin/
+│   ├── t                   # タスク管理TUI
+│   └── n                   # メモ/ノートTUI（2ペイン）
 ├── gruvbox-dark.itermcolors      # iTerm2カラープリセット
 ├── Brewfile                # Homebrewパッケージ定義
 ├── install.sh              # インストールスクリプト
@@ -469,6 +472,61 @@ brew bundle dump --file=~/dotfiles/Brewfile --force
 # Brewfileに無いパッケージを確認
 brew bundle cleanup --file=~/dotfiles/Brewfile
 ```
+
+---
+
+## 自作 CLI ツール (`~/dotfiles/bin/`)
+
+### `t` - タスク管理 TUI
+
+```bash
+t                              # 起動
+```
+
+tmux ペインに常駐できる Neo-tree 風タスク管理ツール。
+
+```
+j/k          カーソル移動
+a            タスク追加
+d            完了トグル
+x            削除
+e            タイトル編集
+Enter        詳細(メモ)編集 (Alt+Enter保存, ESCキャンセル)
+g/G          先頭/末尾
+q            終了
+```
+
+データ: `~/.tasks.json`
+
+### `n` - メモ/ノート TUI（2ペイン）
+
+```bash
+n                              # 起動
+```
+
+Neo-tree + エディタ風の 2 ペイン構成メモアプリ。左にノート一覧、右に本文表示。
+
+```
+── 左ペイン ──
+j/k          カーソル移動（右ペインが追従）
+a            ノート追加（Blank / テンプレート選択）
+x            削除
+e            タイトル編集
+Enter        本文編集モード (Alt+Enter保存, ESCキャンセル)
+y            本文をクリップボードにコピー
+t            テンプレート管理画面
+Tab          右ペインへフォーカス移動
+
+── 右ペイン（閲覧モード）──
+j/k          スクロール
+g/G          先頭/末尾
+y            本文をクリップボードにコピー
+Tab          左ペインへフォーカス移動
+
+q            終了
+```
+
+データ: `~/.notes.json` / テンプレート: `~/.note-templates.json`
 
 ---
 
