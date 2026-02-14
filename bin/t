@@ -28,6 +28,9 @@ PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2, "none": 3}
 
 def char_width(ch):
     """Return display width of a single character."""
+    cp = ord(ch)
+    if 0xE000 <= cp <= 0xF8FF or 0xF0000 <= cp <= 0xFFFFD or 0x100000 <= cp <= 0x10FFFD:
+        return 2
     ea = unicodedata.east_asian_width(ch)
     return 2 if ea in ("F", "W") else 1
 
