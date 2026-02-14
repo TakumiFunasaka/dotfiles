@@ -1,0 +1,8 @@
+# bat configuration
+# https://github.com/sharkdp/bat
+
+# テーマ: Catppuccin Mocha
+--theme="Catppuccin Mocha"
+
+# 行番号を常に表示
+--style="numbers,changes,header"

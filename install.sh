@@ -43,6 +43,10 @@ ln -sf "$DOTFILES_DIR/.gitconfig" "$HOME/.gitconfig"
 ln -sf "$DOTFILES_DIR/.gitignore_global" "$HOME/.gitignore_global"
 ln -sf "$DOTFILES_DIR/starship.toml" "$HOME/.config/starship.toml"
 ln -sf "$DOTFILES_DIR/nvim" "$HOME/.config/nvim"
+ln -sf "$DOTFILES_DIR/.tmux.conf" "$HOME/.tmux.conf"
+ln -sf "$DOTFILES_DIR/.tmux" "$HOME/.tmux"
+mkdir -p "$HOME/.config/bat"
+ln -sf "$DOTFILES_DIR/bat/config" "$HOME/.config/bat/config"
 
 echo "✅ Symlinks created!"
 
@@ -87,6 +91,26 @@ if command -v mise &> /dev/null; then
 fi
 
 # ----------------------------------------------------------------------------
+# Neovimプラグインのインストール
+# ----------------------------------------------------------------------------
+if command -v nvim &> /dev/null; then
+  echo "📦 Installing Neovim plugins..."
+  nvim --headless "+Lazy! sync" +qa 2>/dev/null
+  echo "✅ Neovim plugins installed!"
+fi
+
+# ----------------------------------------------------------------------------
+# iTerm2 カラープリセット
+# ----------------------------------------------------------------------------
+if [ -f "$DOTFILES_DIR/catppuccin-mocha.itermcolors" ]; then
+  echo ""
+  echo "🎨 iTerm2 Catppuccin Mocha カラープリセット:"
+  echo "   手動でインポートしてください:"
+  echo "   iTerm2 > Settings > Profiles > Colors > Color Presets... > Import..."
+  echo "   → $DOTFILES_DIR/catppuccin-mocha.itermcolors"
+fi
+
+# ----------------------------------------------------------------------------
 # 完了
 # ----------------------------------------------------------------------------
 echo ""
@@ -96,10 +120,13 @@ echo "======================================================================"
 echo ""
 echo "📝 Next steps:"
 echo "  1. Restart your terminal or run: source ~/.zshrc"
-echo "  2. (Optional) Install languages with mise:"
+echo "  2. iTerm2 にカラープリセットをインポート（上記参照）"
+echo "  3. iTerm2 のフォントを Nerd Font に変更"
+echo "     (未インストールなら: brew install --cask font-hack-nerd-font)"
+echo "  4. (Optional) Install languages with mise:"
 echo "     mise use -g node@lts"
 echo "     mise use -g python@3.12"
-echo "  3. (Optional) Configure local settings:"
+echo "  5. (Optional) Configure local settings:"
 echo "     touch ~/.zshrc.local"
 echo ""
 echo "💾 Backup location: $BACKUP_DIR"

@@ -1,542 +1,526 @@
-# 🏠 Dotfiles (2025 Edition)
+# Dotfiles
 
-モダンで高速、保守しやすいdotfiles環境です。
+macOS 開発環境の設定ファイル一式。新しい Mac でもコマンド数回で同じ環境が再現できる。
 
-## ✨ 特徴
+## 新しい Mac でのセットアップ
 
-- **🚀 高速**: Starship、eza、ripgrepなどの現代的なツール
-- **🎨 美しい**: Starshipによるカスタマイズ可能なプロンプト
-- **🔧 シンプル**: 必要最小限の設定で理解しやすい
-- **📦 統一管理**: miseで複数言語のバージョンを統一管理
-- **🔍 強力な検索**: fzfによるファジーファインダー
+### 前提条件
 
-## 📦 含まれるツール
+- macOS (Apple Silicon)
+- Xcode Command Line Tools (`xcode-select --install`)
 
-### コアツール
-- **[mise](https://mise.jdx.dev/)** - 統一的なバージョンマネージャー（asdfの後継）
-- **[Starship](https://starship.rs/)** - 高速でカスタマイズ可能なプロンプト
-- **[Homebrew](https://brew.sh/)** - macOSパッケージマネージャー
-
-### モダンCLIツール
-- **[eza](https://github.com/eza-community/eza)** - `ls`の現代的な代替
-- **[bat](https://github.com/sharkdp/bat)** - `cat`の代替（シンタックスハイライト付き）
-- **[zoxide](https://github.com/ajeetdsouza/zoxide)** - スマートな`cd`
-- **[fzf](https://github.com/junegunn/fzf)** - ファジーファインダー
-- **[ripgrep](https://github.com/BurntSushi/ripgrep)** - 高速grep
-- **[fd](https://github.com/sharkdp/fd)** - 高速find
-- **[ghq](https://github.com/x-motemen/ghq)** - Gitリポジトリ管理
-
-## 🚀 インストール
-
-### 新規インストール
+### 手順
 
 ```bash
-# リポジトリをクローン
-git clone <your-repo-url> ~/dotfiles
+# 1. Homebrew をインストール
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# 2. dotfiles をクローン
+git clone git@github.com:TakumiFunasaka/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 
-# インストールスクリプトを実行
+# 3. インストールスクリプトを実行
 chmod +x install.sh
 ./install.sh
-```
 
-### 既存環境からの移行
+# 4. シェルを再起動
+exec zsh
 
-```bash
-cd ~/dotfiles
-
-# 最新の変更を取得
-git pull
-
-# modernize-2025ブランチに切り替え（テスト用）
-git checkout modernize-2025
-
-# インストール
-./install.sh
-
-# 問題なければmasterにマージ
-git checkout master
-git merge modernize-2025
-```
-
-### インストール後
-
-```bash
-# ターミナルを再起動するか
-source ~/.zshrc
-
-# 言語のバージョンをインストール（必要に応じて）
+# 5. 言語バージョンをインストール（必要に応じて）
 mise use -g node@lts
 mise use -g python@3.12
 mise use -g go@latest
 ```
 
-## 📁 ファイル構成
+### iTerm2 の初期設定（手動）
+
+1. `iTerm2` > `Settings` (Cmd+,) > `Profiles` > `Text`
+   - Font を **Nerd Font** に変更（例: `Hack Nerd Font`）
+   - 未インストールなら `brew install --cask font-hack-nerd-font`
+2. `Profiles` > `Colors` > `Color Presets...` > `Import...`
+   - `~/dotfiles/catppuccin-mocha.itermcolors` を選択
+   - もう一度 `Color Presets...` > `catppuccin-mocha` を選択
+3. `Profiles` > `Keys` > `General`
+   - Left Option key を `Esc+` に変更
+4. `Profiles` > `Terminal`
+   - Scrollback lines を `10000` 以上に
+5. `Profiles` > `Window`
+   - Columns: `200`, Rows: `50` 程度に
+
+---
+
+## ファイル構成
 
 ```
 dotfiles/
-├── .zshenv             # 環境変数（常に読み込まれる）
-├── .zshrc              # メインのZsh設定
-├── .zprofile           # ログイン時の設定
-├── .gitconfig          # Git設定
-├── .gitignore_global   # グローバルgitignore
-├── starship.toml       # Starshipプロンプト設定
-├── Brewfile            # Homebrewパッケージ定義
-├── install.sh          # インストールスクリプト
-├── nvim/               # Neovim設定
-└── README.md           # このファイル
+├── .zshenv                 # 環境変数（常に読み込まれる、Homebrew・mise初期化）
+├── .zshrc                  # メインのZsh設定（エイリアス、ツール初期化）
+├── .zprofile               # ログイン時の設定（XDG、PATH）
+├── .gitconfig              # Git設定（エイリアス、delta連携）
+├── .gitignore_global       # グローバルgitignore
+├── .tmux.conf              # tmux設定
+├── .tmux/
+│   └── dev-layout.conf     # 開発用レイアウト（エディタ+Claude Code+ターミナル）
+├── starship.toml           # Starshipプロンプト設定
+├── nvim/
+│   └── init.lua            # Neovim設定（lazy.nvim + プラグイン）
+├── bat/
+│   └── config              # bat設定（Catppuccin テーマ）
+├── catppuccin-mocha.itermcolors  # iTerm2カラープリセット
+├── Brewfile                # Homebrewパッケージ定義
+├── install.sh              # インストールスクリプト
+└── README.md               # このファイル
 ```
 
-## 🎨 カスタマイズ
+### シンボリックリンクの対応関係
 
-### ローカル設定
+| dotfiles 内 | リンク先 |
+|---|---|
+| `.zshenv` | `~/.zshenv` |
+| `.zshrc` | `~/.zshrc` |
+| `.zprofile` | `~/.zprofile` |
+| `.gitconfig` | `~/.gitconfig` |
+| `.gitignore_global` | `~/.gitignore_global` |
+| `.tmux.conf` | `~/.tmux.conf` |
+| `.tmux/` | `~/.tmux/` |
+| `starship.toml` | `~/.config/starship.toml` |
+| `nvim/` | `~/.config/nvim/` |
+| `bat/config` | `~/.config/bat/config` |
 
-個人的な設定は以下のファイルに記載することで、gitで管理せずに済みます：
+---
 
-```bash
-# Zsh設定
-~/.zshrc.local
+## カラーテーマ
 
-# プロファイル設定
-~/.zprofile.local
+全ツールを **Catppuccin Mocha** で統一している。
+
+| ツール | 設定方法 |
+|---|---|
+| iTerm2 | `catppuccin-mocha.itermcolors` を手動インポート |
+| tmux | `.tmux.conf` にハードコード済み |
+| nvim | lazy.nvim で `catppuccin/nvim` プラグイン |
+| bat | `bat/config` で `--theme="Catppuccin Mocha"` |
+| Starship / eza | ターミナルのカラーパレットに従う |
+
+---
+
+## tmux
+
+ターミナルの画面分割とセッション管理。
+
+### 概念
+
+```
+セッション (Session) ← プロジェクト単位の作業空間
+  └── ウィンドウ (Window) ← タブ的なもの
+        └── ペイン (Pane) ← 画面分割
 ```
 
-### Starshipのカスタマイズ
+### prefix キー
+
+全ての tmux 操作は **`Ctrl+s` の後にキーを押す**2段階操作。以下 `prefix` = `Ctrl+s`。
+
+### 起動・セッション管理
 
 ```bash
-vim ~/.config/starship.toml
+tmux                       # 起動
+tmux new -s work           # 名前付きセッション作成
+dev                        # カレントディレクトリ名でセッション作成/アタッチ (zshrc関数)
+dev myproject              # 名前を指定してセッション作成/アタッチ
+
+prefix + d                 # デタッチ（セッションは裏で生き続ける）
+tmux attach                # 最後のセッションに戻る
+tma                        # fzfでセッション選択してアタッチ (zshrcエイリアス)
+tls                        # セッション一覧 (zshrcエイリアス)
+tks <name>                 # セッション削除 (zshrcエイリアス)
 ```
 
-詳細は[Starshipドキュメント](https://starship.rs/config/)を参照。
+### ペイン操作（画面分割）
 
-### 言語バージョンの管理
+```
+prefix + |        左右に分割
+prefix + -        上下に分割
+prefix + h/j/k/l  ペイン間移動（vim風）
+prefix + H/J/K/L  ペインリサイズ（Shift + vim風）
+prefix + x        ペインを閉じる
+prefix + z        全画面化トグル
+```
+
+マウスも有効。クリックでペイン切替、境界線ドラッグでリサイズできる。
+
+### ウィンドウ操作
+
+```
+prefix + c        新しいウィンドウ
+prefix + n / p    次 / 前のウィンドウ
+prefix + 1~9      番号で直接移動
+prefix + ,        ウィンドウ名を変更
+prefix + &        ウィンドウを閉じる
+```
+
+### コピーモード
+
+```
+prefix + [        コピーモードに入る（スクロール可能になる）
+  j/k             上下移動
+  Ctrl+u/d        半ページスクロール
+  /               検索
+  v               選択開始
+  y               コピー（macのクリップボードに入る）
+  q               終了
+```
+
+### その他
+
+```
+prefix + r        設定リロード
+prefix + D        開発用レイアウト展開
+prefix + s        セッション一覧ツリー
+prefix + w        ウィンドウ一覧ツリー
+```
+
+### 開発用レイアウト（prefix + D）
+
+```
+┌──────────────────┬──────────────────┐
+│                  │                  │
+│  エディタ(nvim)  │  Claude Code     │
+│                  │                  │
+├──────────────────┤                  │
+│  ターミナル      │                  │
+└──────────────────┴──────────────────┘
+```
+
+---
+
+## Neovim
+
+### 起動
 
 ```bash
-# プロジェクトごとに指定
-cd your-project
-mise use node@18
-mise use python@3.11
+v .               # カレントディレクトリで開く
+v file.txt        # ファイルを開く
+```
 
-# グローバルに指定
+### 基本操作
+
+leader キーは `Space`。
+
+```
+Space + w         保存
+Space + q         閉じる
+Esc Esc           検索ハイライト消去
+Ctrl + h/j/k/l   ウィンドウ間移動
+Tab / Shift+Tab   バッファ切替
+```
+
+### ファイルツリー (Neo-tree)
+
+Finder のようにファイル/フォルダを操作できる。
+
+```
+Space + e         ファイルツリー開閉
+Space + o         ファイルツリーにフォーカス
+```
+
+ツリー内の操作:
+
+```
+Enter             ファイルを開く / ディレクトリ開閉
+a                 新規作成（末尾 / でディレクトリ）
+d                 削除
+r                 リネーム
+c                 コピー
+m                 移動
+y                 パスをコピー
+H                 隠しファイル表示切替
+/                 名前でフィルター
+q                 ツリーを閉じる
+```
+
+### ファイル検索 (Telescope)
+
+```
+Space + f         ファイル名で検索
+Space + g         テキスト(grep)検索
+Space + b         バッファ一覧
+Space + r         最近開いたファイル
+```
+
+Telescope 内の操作:
+
+```
+Ctrl + j/k        候補を上下移動
+Enter             開く
+Ctrl + x          水平分割で開く
+Ctrl + v          垂直分割で開く
+Esc               閉じる
+```
+
+### インストール済みプラグイン
+
+| プラグイン | 役割 |
+|---|---|
+| catppuccin | カラースキーム |
+| neo-tree | ファイルツリー |
+| telescope | ファジーファインダー |
+| treesitter | シンタックスハイライト |
+| lualine | ステータスバー |
+| gitsigns | Git変更の行表示 |
+| indent-blankline | インデントガイド |
+
+---
+
+## Claude Code
+
+AI を使ったコーディングアシスタント。
+
+### 起動
+
+```bash
+cc                         # claude を起動
+ccc                        # 前回の会話を続ける
+ccr                        # 過去のセッションを選んで再開
+cc "この関数にテストを書いて"   # 指示付きで起動
+```
+
+### tmux と組み合わせた使い方
+
+```bash
+# 1. プロジェクトディレクトリでセッション開始
+cd ~/code/src/github.com/user/project
+dev
+
+# 2. 開発レイアウトを展開 (prefix + D)
+# 3. 左上ペインでエディタ: v .
+# 4. 右ペインに移動 (prefix + l) して Claude Code: cc
+# 5. 左下ペインでサーバーやテスト
+
+# Claude Code が作業中に隣のペインで確認できる
+```
+
+### Claude Code 内の操作
+
+```
+/help              ヘルプ
+/compact           会話を要約して圧縮
+Ctrl+C             実行中のキャンセル
+Escape             入力をクリア
+```
+
+---
+
+## シェル (Zsh)
+
+### エイリアス一覧
+
+#### ファイル操作（eza / bat）
+
+```bash
+ls                 # eza --icons --git
+ll                 # 詳細表示
+la                 # 隠しファイル含む
+lt                 # ツリー表示
+lt -L 2            # ツリー（深さ2まで）
+cat file.txt       # bat（シンタックスハイライト付き）
+```
+
+#### ディレクトリ移動（zoxide）
+
+```bash
+cd foo             # zoxide: 部分一致でジャンプ（過去に行ったディレクトリを学習）
+cd proj            # → ~/code/src/.../project に飛ぶ
+zi foo             # インタラクティブ選択（複数候補がある場合）
+..                 # cd ..
+...                # cd ../..
+```
+
+#### ファジー検索（fzf）
+
+```bash
+Ctrl+r             # コマンド履歴を検索
+Ctrl+t             # ファイルを検索してパス挿入
+Alt+c              # ディレクトリを検索してcd
+repo               # ghqリポジトリをfzfで選んでcd
+```
+
+#### Git
+
+```bash
+# 状態確認
+gs                 # git status
+gd                 # git diff
+gds                # git diff --staged
+glog               # git log --oneline --graph --decorate
+
+# コミット
+ga file            # git add file
+gaa                # git add --all
+gc                 # git commit -v
+gcm "msg"          # git commit -m "msg"
+gca                # git commit --amend
+
+# ブランチ
+gco branch         # git checkout branch
+gcb new-branch     # git checkout -b new-branch
+gb                 # git branch
+
+# リモート
+gl                 # git pull
+gp                 # git push
+gf                 # git fetch
+
+# スタッシュ
+gst                # git stash
+gstp               # git stash pop
+```
+
+#### グローバルエイリアス（パイプ省略）
+
+```bash
+ls G test          # = ls | grep test
+history H          # = history | head
+cat file C         # = cat file | pbcopy（クリップボードへ）
+```
+
+#### tmux
+
+```bash
+dev                # カレントディレクトリ名でセッション作成/アタッチ
+dev name           # 名前指定でセッション作成/アタッチ
+tma                # fzfでセッション選択
+tls                # セッション一覧
+tks name           # セッション削除
+```
+
+#### Claude Code
+
+```bash
+cc                 # claude
+ccc                # claude --continue
+ccr                # claude --resume
+```
+
+---
+
+## CLIツール詳細
+
+### ripgrep（高速grep）
+
+```bash
+rg "pattern"                    # カレントディレクトリ配下を検索
+rg "pattern" src/               # ディレクトリを指定
+rg -i "pattern"                 # 大文字小文字を区別しない
+rg -t ts "function"             # TypeScriptファイルのみ
+rg -C 3 "pattern"               # 前後3行のコンテキスト付き
+rg --stats "pattern"            # 統計情報付き
+```
+
+### fd（高速find）
+
+```bash
+fd "*.tsx"                      # .tsxファイルを検索
+fd -t d "test"                  # testを含むディレクトリを検索
+fd -e go                        # .goファイルを検索
+fd -H ".env"                    # 隠しファイルも含めて検索
+```
+
+### ghq（リポジトリ管理）
+
+```bash
+ghq get https://github.com/user/repo   # クローン（~/code/src/... に整理される）
+ghq list                                # リポジトリ一覧
+repo                                    # fzfで選んでcd
+```
+
+### mise（バージョンマネージャー）
+
+```bash
+# グローバル
 mise use -g node@lts
 mise use -g python@3.12
+mise list                       # インストール済み一覧
+mise current                    # 現在のバージョン
 
-# インストール済みバージョンの確認
-mise list
-
-# 利用可能なバージョンの確認
-mise ls-remote node
-```
-
-## 🔑 主要なエイリアスとコマンド
-
-### ディレクトリ移動
-- `z <dir>` - zoxideによるスマートcd
-- `..`, `...`, `....` - 上のディレクトリへ移動
-
-### ファイル操作
-- `ls`, `ll`, `la` - eza/lsのエイリアス
-- `lt` - ツリー表示
-- `cat` - batのエイリアス
-
-### Git（基本コマンド）
-- `g` → `git`
-- `gs` → `git status`
-- `ga` → `git add`
-- `gaa` → `git add --all`
-- `gc` → `git commit -v`
-- `gcm` → `git commit -m`
-- `gca` → `git commit --amend`
-
-### Git（ブランチ操作）
-- `gco` → `git checkout`
-- `gcb` → `git checkout -b`
-- `gb` → `git branch`
-- `gbd` → `git branch -d`
-
-### Git（差分・履歴）
-- `gd` → `git diff`
-- `gds` → `git diff --staged`
-- `glog` → `git log --oneline --graph --decorate`
-- `gloga` → `git log --oneline --graph --decorate --all`
-
-### Git（リモート）
-- `gl` → `git pull`
-- `gp` → `git push`
-- `gf` → `git fetch`
-
-### Git（スタッシュ）
-- `gst` → `git stash`
-- `gsta` → `git stash apply`
-- `gstp` → `git stash pop`
-
-### グローバルエイリアス（超便利！）
-- `G` → `| grep` - コマンドの後ろに付けるだけ
-- `L` → `| less` - ページャーで表示
-- `H` → `| head` - 先頭だけ表示
-- `T` → `| tail` - 末尾だけ表示
-- `C` → `| pbcopy` - クリップボードにコピー
-
-**使用例:**
-```bash
-ls -la G "test"        # ls -la | grep "test"
-history G "git" H      # history | grep "git" | head
-cat file.txt C         # ファイル内容をクリップボードへ
-```
-
-### リポジトリ管理
-- `repo` - ghq + fzfでリポジトリを検索・移動
-
-## 🔄 アップデート
-
-```bash
-cd ~/dotfiles
-git pull
-./install.sh
-```
-
-## 🔙 ロールバック
-
-何か問題があった場合：
-
-```bash
-# 旧バージョンに戻す
-git checkout master  # または任意のコミット
-
-# バックアップから復元
-# install.shが作成したバックアップは ~/dotfiles_backup_YYYYMMDD_HHMMSS にあります
-```
-
-## 📝 Tips & 詳細な使い方
-
-### 🎯 mise（バージョンマネージャー）の使い方
-
-#### グローバル設定
-```bash
-# よく使う言語をグローバルにインストール
-mise use -g node@lts          # Node.js LTS版
-mise use -g node@20           # Node.js 20系
-mise use -g python@3.12       # Python 3.12
-mise use -g go@latest         # Go最新版
-
-# インストール済みバージョンの確認
-mise list
-
-# 現在アクティブなバージョンを確認
-mise current
-```
-
-#### プロジェクトごとの設定
-```bash
-# プロジェクトディレクトリで実行
+# プロジェクトごと
 cd your-project
-mise use node@18              # このプロジェクトだけNode 18
-mise use python@3.11          # このプロジェクトだけPython 3.11
-
-# .mise.toml が自動生成される
-cat .mise.toml
-# [tools]
-# node = "18"
-# python = "3.11"
-
-# プロジェクトメンバーと設定を共有
-git add .mise.toml
-git commit -m "Add mise configuration"
+mise use node@18                # .mise.toml が生成される
 ```
 
-#### 利用可能なバージョンの確認
-```bash
-# Node.jsの利用可能なバージョン一覧
-mise ls-remote node
-
-# 特定のバージョンを検索
-mise ls-remote node | grep "20"
-
-# Pythonの利用可能なバージョン
-mise ls-remote python
-```
-
-#### バージョンの切り替え
-```bash
-# ディレクトリに入ると自動的に切り替わる
-cd project-a      # → Node 18が有効化
-cd ../project-b   # → Node 20が有効化
-cd ~              # → グローバル設定（LTS）に戻る
-```
-
-### 🔍 fzf（ファジーファインダー）の使い方
-
-#### 基本的なキーバインド
-```bash
-# コマンド履歴を検索
-Ctrl+R            # 履歴を検索して実行
-
-# ファイルを検索してパスを挿入
-Ctrl+T            # カレントディレクトリ配下のファイルを検索
-
-# ディレクトリを検索して移動
-Alt+C             # ディレクトリを検索してcd
-```
-
-#### fzfの操作方法
-```
-↑/↓ または Ctrl+j/k  : 上下移動
-Enter                 : 選択して確定
-Ctrl+c または Esc     : キャンセル
-Tab                   : 複数選択（トグル）
-Shift+Tab             : 複数選択解除
-```
-
-#### 実践的な使い方
-```bash
-# Gitブランチを検索して切り替え
-git branch | fzf | xargs git checkout
-
-# プロセスをfzfで選んで終了
-ps aux | fzf | awk '{print $2}' | xargs kill
-
-# ファイルを検索してvimで開く
-vim $(fzf)
-
-# 複数ファイルを選択して削除（Tabで複数選択）
-rm $(fzf -m)
-```
-
-### 🚀 zoxide（スマートcd）の使い方
-
-#### 基本的な使い方
-```bash
-# 初回は通常のcdで移動
-cd ~/Documents/projects/my-awesome-app
-
-# 2回目以降は部分一致でOK
-z awesome         # → ~/Documents/projects/my-awesome-app
-z app            # → 同じく移動
-z my-a           # → 同じく移動
-```
-
-#### よく使うコマンド
-```bash
-z foo            # foo にマッチするディレクトリへ移動
-zi foo           # インタラクティブに選択（複数候補がある場合）
-z foo bar        # foo と bar 両方を含むディレクトリへ
-z -              # 前のディレクトリに戻る
-
-# データベースを表示
-zoxide query -l          # 記憶している全ディレクトリ
-zoxide query -ls foo     # foo にマッチするディレクトリ一覧
-zoxide query --score     # スコア付きで表示
-```
-
-#### 学習の仕組み
-- **頻度**: よく訪れるディレクトリほど優先度が高い
-- **最近性**: 最近使ったディレクトリも優先される
-- **自動削除**: 存在しないディレクトリは自動で削除される
-
-### 📂 eza（モダンなls）の使い方
+### bat（cat代替）
 
 ```bash
-# 基本（アイコン + Git情報付き）
-ls               # eza --icons --git
-ll               # 詳細表示
-la               # 隠しファイルも表示
-lt               # ツリー表示
-
-# さらに詳細な使い方
-eza -l --git            # Git情報を表示
-eza --tree --level=2    # 2階層までツリー表示
-eza -l --sort=size      # サイズでソート
-eza -l --sort=modified  # 更新日時でソート
-eza -la --no-icons      # アイコンなし
+cat file.json                   # シンタックスハイライト付き表示
+bat -r 10:20 file.txt           # 10〜20行目を表示
+bat --plain file.txt            # プレーンテキスト（色なし）
 ```
 
-### 📄 bat（モダンなcat）の使い方
+---
+
+## Homebrew パッケージの管理
 
 ```bash
-# 基本（シンタックスハイライト付き）
-cat file.json         # JSONが色付きで表示
-cat file.py          # Pythonのコードが色付き
-
-# ページャーとして使う
-less file.txt        # → bat として動作
-
-# 行番号付きで表示
-bat -n file.txt
-
-# 特定の行を表示
-bat -r 10:20 file.txt    # 10〜20行目を表示
-
-# Gitの差分と一緒に表示
-bat -d file.txt          # Git差分を表示
-
-# プレーンテキストとして表示（色なし）
-bat --plain file.txt
-```
-
-### 🔎 ripgrep（高速grep）の使い方
-
-```bash
-# 基本的な検索
-rg "pattern"                    # カレントディレクトリ配下を検索
-rg "pattern" path/              # 特定のディレクトリを検索
-rg -i "pattern"                 # 大文字小文字を区別しない
-
-# ファイルタイプを指定
-rg -t js "function"             # JavaScriptファイルのみ
-rg -t py "class"                # Pythonファイルのみ
-rg -T js "function"             # JavaScriptファイルを除外
-
-# コンテキスト付き表示
-rg -C 3 "pattern"               # 前後3行を表示
-rg -A 2 "pattern"               # 後2行を表示
-rg -B 2 "pattern"               # 前2行を表示
-
-# 統計情報
-rg --stats "pattern"            # マッチ数などの統計
-```
-
-### 🔧 ghq（リポジトリ管理）の使い方
-
-```bash
-# リポジトリをクローン（自動で整理される）
-ghq get https://github.com/user/repo
-# → ~/code/src/github.com/user/repo にクローン
-
-# リポジトリ一覧
-ghq list
-
-# リポジトリのパスを取得
-ghq root
-ghq list -p                     # フルパス表示
-
-# fzfと組み合わせて移動（repoエイリアス）
-repo                            # リポジトリ選択→移動
-```
-
-### 🎨 Starshipプロンプトのカスタマイズ
-
-```bash
-# 設定ファイルを編集
-vim ~/.config/starship.toml
-
-# プリセットを試す
-starship preset nerd-font-symbols -o ~/.config/starship.toml
-starship preset bracketed-segments -o ~/.config/starship.toml
-
-# 設定を確認
-starship config
-
-# 特定のモジュールを無効化（例：時間表示）
-[time]
-disabled = true
-```
-
-### 🍺 Homebrewパッケージの管理
-
-```bash
-# 現在の環境からBrewfileを生成
-brew bundle dump --file=~/dotfiles/Brewfile --force
-
 # Brewfileからインストール
 brew bundle --file=~/dotfiles/Brewfile
 
-# Brewfileに無いパッケージを削除
+# 現在の環境からBrewfileを再生成
+brew bundle dump --file=~/dotfiles/Brewfile --force
+
+# Brewfileに無いパッケージを確認
 brew bundle cleanup --file=~/dotfiles/Brewfile
-
-# Brewfileをチェック
-brew bundle check --file=~/dotfiles/Brewfile
 ```
 
-### 🔄 便利なワークフロー
+---
 
-#### Git操作の基本フロー
+## ローカル設定
+
+Git 管理しない個人設定はこれらのファイルに書く:
+
 ```bash
-# ブランチを切る
-gcb feature/new-feature
-
-# 変更を加える
-vim file.txt
-
-# コミット＆プッシュ
-gaa                    # 全変更をステージング
-gcm "feat: 新機能追加"  # コミット
-gp                     # プッシュ
+~/.zshrc.local       # Zsh追加設定
+~/.zprofile.local    # PATH追加など
 ```
 
-#### プロジェクト間の移動
-```bash
-# リポジトリを検索して移動
-repo                   # fzfでリポジトリ選択
+---
 
-# または、zoxideで移動
-z my-project          # よく使うプロジェクトに瞬時に移動
-```
-
-#### ファイル検索とコマンド実行
-```bash
-# ファイルを検索してvimで開く
-vim $(fzf)
-
-# ディレクトリを検索して移動
-cd $(fd --type d | fzf)
-
-# コードを検索してvimで開く
-rg -l "TODO" | fzf | xargs vim
-```
-
-## 🐛 トラブルシューティング
+## トラブルシューティング
 
 ### 補完が効かない
 
 ```bash
-rm -f ~/.zcompdump
-autoload -Uz compinit && compinit
+rm -f ~/.zcompdump && exec zsh
 ```
 
-### miseが認識されない
+### mise / node が認識されない
 
 ```bash
-# Homebrewのパスを確認
-which mise
-
-# シェルを再読み込み
-source ~/.zshenv
-source ~/.zshrc
-
-# または
-exec zsh
-```
-
-### Cursorのサンドボックス環境でnpm/nodeが使えない
-
-Cursorのサンドボックス環境は非インタラクティブシェルのため、`.zshenv`で初期化されます。
-通常は自動的に動作しますが、問題がある場合：
-
-```bash
-# .zshenvが正しくリンクされているか確認
+# .zshenv のリンクを確認
 ls -la ~/.zshenv
-
-# miseが読み込まれているか確認
-echo $MISE_SHELL
-
-# 手動でシェルをリロード
+# シェル再起動
 exec zsh
 ```
 
-**根本原因**: `.zshrc`は非インタラクティブシェルでは読み込まれませんが、`.zshenv`は常に読み込まれます。このdotfilesでは`.zshenv`でmiseとHomebrewを初期化しているため、Cursorのサンドボックス環境でも動作します。
+### nvim のプラグインがおかしい
 
-## 📚 参考リンク
+```bash
+# プラグインを再インストール
+nvim --headless "+Lazy! sync" +qa
+# キャッシュをクリア
+rm -rf ~/.local/share/nvim/lazy
+nvim  # 起動すると自動で再インストールされる
+```
 
-- [Starship Documentation](https://starship.rs/)
-- [mise Documentation](https://mise.jdx.dev/)
-- [Homebrew Documentation](https://docs.brew.sh/)
-- [fzf Wiki](https://github.com/junegunn/fzf/wiki)
+### tmux のカラーがおかしい
 
-## 📄 ライセンス
-
-MIT
+iTerm2 の `Profiles` > `Terminal` > `Report Terminal Type` が `xterm-256color` になっているか確認。
 
 ---
 
-**最終更新**: 2025年11月
+## 更新履歴
 
+- **2025-02**: tmux 導入、Catppuccin Mocha でカラーテーマ統一、nvim に lazy.nvim + プラグイン追加、Claude Code エイリアス追加
+- **2025-11**: 2025年版に完全刷新、Cursor サンドボックス対応
+
+## ライセンス
+
+MIT

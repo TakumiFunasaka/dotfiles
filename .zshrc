@@ -131,6 +131,11 @@ alias v='vim'
 alias python='python3'
 alias pip='pip3'
 
+# Claude Code
+alias cc='claude'
+alias ccc='claude --continue'
+alias ccr='claude --resume'
+
 # ----------------------------------------------------------------------------
 # 環境固有の設定
 # ----------------------------------------------------------------------------
@@ -173,6 +178,33 @@ if command -v ghq &> /dev/null && command -v fzf &> /dev/null; then
       cd $(ghq root)/$repo
     fi
   }
+fi
+
+# ----------------------------------------------------------------------------
+# tmux ヘルパー
+# ----------------------------------------------------------------------------
+if command -v tmux &> /dev/null; then
+  # プロジェクトディレクトリ名でセッションを開始/アタッチ
+  function dev() {
+    local session_name="${1:-$(basename $(pwd))}"
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+      tmux attach-session -t "$session_name"
+    else
+      tmux new-session -s "$session_name"
+    fi
+  }
+
+  # セッション一覧から選んでアタッチ（fzf連携）
+  function tma() {
+    local session
+    session=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | fzf --height 40% --reverse)
+    if [ -n "$session" ]; then
+      tmux attach-session -t "$session"
+    fi
+  }
+
+  alias tls='tmux list-sessions'
+  alias tks='tmux kill-session -t'
 fi
 
 # ----------------------------------------------------------------------------
