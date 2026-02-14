@@ -13,12 +13,12 @@ STATE_FILE = os.path.expanduser("~/.health_reminders.json")
 # Reminder types (matching focus app)
 REMINDER_TYPES = [
     {"key": "water",       "icon": "\uf043",  "label": "水を飲む",       "title": "水分補給の時間です",       "msg": "コップ1杯の水を飲みましょう"},
-    {"key": "medicine",    "icon": "\uf0f1",  "label": "薬を飲む",       "title": "お薬の時間です",           "msg": "お薬を飲みましょう"},
-    {"key": "supplement",  "icon": "\uf469",  "label": "サプリを飲む",   "title": "サプリメントの時間です",   "msg": "サプリメントを飲みましょう"},
-    {"key": "exercise",    "icon": "\uf44b",  "label": "運動をする",     "title": "運動の時間です",           "msg": "運動で体を動かしましょう"},
-    {"key": "temperature", "icon": "\uf2c9",  "label": "体温を測る",     "title": "体温測定の時間です",       "msg": "体温を測りましょう"},
     {"key": "stand",       "icon": "\uf183",  "label": "立ち上がる",     "title": "立ち上がりましょう",       "msg": "少し体を動かして、血行を良くしましょう"},
     {"key": "rest",        "icon": "\uf070",  "label": "目を休める",     "title": "目を休めましょう",         "msg": "20秒間、遠くを見て目を休ませましょう"},
+    {"key": "exercise",    "icon": "\uf44b",  "label": "運動をする",     "title": "運動の時間です",           "msg": "運動で体を動かしましょう"},
+    {"key": "medicine",    "icon": "\uf0f1",  "label": "薬を飲む",       "title": "お薬の時間です",           "msg": "お薬を飲みましょう"},
+    {"key": "supplement",  "icon": "\uf469",  "label": "サプリを飲む",   "title": "サプリメントの時間です",   "msg": "サプリメントを飲みましょう"},
+    {"key": "temperature", "icon": "\uf2c9",  "label": "体温を測る",     "title": "体温測定の時間です",       "msg": "体温を測りましょう"},
 ]
 
 ICON_CHECK = "\uf00c"
@@ -62,6 +62,8 @@ def safe_addstr(win, y, x, text, max_w, attr=0):
 
 def textbox_input(stdscr, y, x, width, prompt="", initial=""):
     """Inline text input."""
+    curses.cbreak()
+    stdscr.nodelay(False)
     curses.curs_set(1)
     h, w = stdscr.getmaxyx()
     prompt_w = str_width(prompt)
@@ -201,221 +203,225 @@ def validate_time(s):
 
 def settings_screen(stdscr, state):
     """Settings screen for managing reminder groups."""
+    # halfdelayを無効化してブロッキング入力に切替（タイムアウトで画面が再描画されるのを防ぐ）
+    curses.cbreak()
+    stdscr.nodelay(False)
+
     cursor = 0
     message = ""
     mode = "list"  # list, times
+    tcursor = 0
 
-    while True:
-        stdscr.erase()
-        h, w = stdscr.getmaxyx()
-        reminders = state.get("reminders", [])
+    try:
+        while True:
+            stdscr.erase()
+            h, w = stdscr.getmaxyx()
+            reminders = state.get("reminders", [])
 
-        # ── Header ──
-        header = f" {ICON_GEAR} Settings"
-        stdscr.attron(curses.A_BOLD)
-        safe_addstr(stdscr, 0, 0, header, w - 1)
-        stdscr.attroff(curses.A_BOLD)
-        safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+            # ── Header ──
+            header = f" {ICON_GEAR} Settings"
+            stdscr.attron(curses.A_BOLD)
+            safe_addstr(stdscr, 0, 0, header, w - 1)
+            stdscr.attroff(curses.A_BOLD)
+            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
 
-        if mode == "list":
-            # ── Reminder group list ──
-            for i, rem in enumerate(reminders):
-                row = 2 + i
-                if row >= h - 2:
-                    break
-                info = get_type_info(rem["type"])
-                enabled = rem.get("enabled", True)
-                toggle = ICON_ON if enabled else ICON_OFF
-                times_str = ", ".join(rem.get("times", []))
-                prefix = f" {ICON_CURSOR} " if i == cursor else "   "
-                line = f"{prefix}{toggle}  {info['icon']}  {info['label']}  ({times_str})"
-                attr = curses.A_REVERSE if i == cursor else 0
-                if not enabled:
-                    attr |= curses.A_DIM
-                safe_addstr(stdscr, row, 0, line, w - 1, attr)
+            if mode == "list":
+                # ── Reminder group list ──
+                for i, rem in enumerate(reminders):
+                    row = 2 + i
+                    if row >= h - 2:
+                        break
+                    info = get_type_info(rem["type"])
+                    enabled = rem.get("enabled", True)
+                    toggle = ICON_ON if enabled else ICON_OFF
+                    times_str = ", ".join(rem.get("times", []))
+                    prefix = f" {ICON_CURSOR} " if i == cursor else "   "
+                    line = f"{prefix}{toggle}  {info['icon']}  {info['label']}  ({times_str})"
+                    attr = curses.A_REVERSE if i == cursor else 0
+                    if not enabled:
+                        attr |= curses.A_DIM
+                    safe_addstr(stdscr, row, 0, line, w - 1, attr)
 
-            if not reminders:
-                safe_addstr(stdscr, 2, 0, " No reminders configured", w - 1)
+                if not reminders:
+                    safe_addstr(stdscr, 2, 0, " No reminders configured", w - 1)
 
-            # ── Available types hint ──
-            used_types = {r["type"] for r in reminders}
-            available = [rt for rt in REMINDER_TYPES if rt["key"] not in used_types]
-            if available and 2 + len(reminders) + 1 < h - 2:
-                hint_row = 2 + len(reminders) + 1
-                safe_addstr(stdscr, hint_row, 0, "─" * (w - 1), w - 1)
-                hint = " Add: " + ", ".join(f"{rt['icon']} {rt['label']}" for rt in available[:4])
-                if len(available) > 4:
-                    hint += " ..."
-                safe_addstr(stdscr, hint_row + 1, 0, hint, w - 1, curses.A_DIM)
+                # ── Available types hint ──
+                used_types = {r["type"] for r in reminders}
+                available = [rt for rt in REMINDER_TYPES if rt["key"] not in used_types]
+                if available and 2 + len(reminders) + 1 < h - 2:
+                    hint_row = 2 + len(reminders) + 1
+                    safe_addstr(stdscr, hint_row, 0, "─" * (w - 1), w - 1)
+                    hint = " Add: " + ", ".join(f"{rt['icon']} {rt['label']}" for rt in available[:4])
+                    if len(available) > 4:
+                        hint += " ..."
+                    safe_addstr(stdscr, hint_row + 1, 0, hint, w - 1, curses.A_DIM)
 
-            # ── Footer ──
-            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
-            if message:
-                footer = f" {message}"
-            else:
-                footer = " e:Toggle  a:Add  x:Del  t:Edit times  ESC:Back"
-            safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+                # ── Footer ──
+                safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+                if message:
+                    footer = f" {message}"
+                else:
+                    footer = " e:Toggle  a:Add  x:Del  t:Edit times  ESC:Back"
+                safe_addstr(stdscr, h - 1, 0, footer, w - 1)
 
-            stdscr.refresh()
-            message = ""
-
-            ch = stdscr.getch()
-
-            if ch == 27:  # ESC
-                return
-            elif ch == ord("j") or ch == curses.KEY_DOWN:
-                if reminders and cursor < len(reminders) - 1:
-                    cursor += 1
-            elif ch == ord("k") or ch == curses.KEY_UP:
-                if cursor > 0:
-                    cursor -= 1
-            elif ch == ord("e"):
-                if reminders:
-                    reminders[cursor]["enabled"] = not reminders[cursor].get("enabled", True)
-                    save_state(state)
-                    status = "ON" if reminders[cursor]["enabled"] else "OFF"
-                    message = f"Toggled {status}"
-            elif ch == ord("a"):
-                # Show type selection
-                used = {r["type"] for r in reminders}
-                avail = [rt for rt in REMINDER_TYPES if rt["key"] not in used]
-                if not avail:
-                    message = "All types already added"
-                    continue
-
-                safe_addstr(stdscr, h - 1, 0, " " * (w - 1), w - 1)
-                sel_str = " Select: " + "  ".join(
-                    f"[{i + 1}]{rt['icon']} {rt['label']}" for i, rt in enumerate(avail[:7])
-                )
-                safe_addstr(stdscr, h - 1, 0, sel_str, w - 1)
                 stdscr.refresh()
+                message = ""
 
-                sel_ch = stdscr.getch()
-                sel_idx = sel_ch - ord("1") if ord("1") <= sel_ch <= ord("9") else -1
-                if 0 <= sel_idx < len(avail):
-                    chosen = avail[sel_idx]
-                    # Ask for first time
-                    time_str = textbox_input(stdscr, h - 1, 0, w, f" Time for {chosen['label']} (HH:MM): ")
+                ch = stdscr.getch()
+
+                if ch == 27:  # ESC
+                    return
+                elif ch == ord("j") or ch == curses.KEY_DOWN:
+                    if reminders and cursor < len(reminders) - 1:
+                        cursor += 1
+                elif ch == ord("k") or ch == curses.KEY_UP:
+                    if cursor > 0:
+                        cursor -= 1
+                elif ch == ord("e"):
+                    if reminders:
+                        reminders[cursor]["enabled"] = not reminders[cursor].get("enabled", True)
+                        save_state(state)
+                        status = "ON" if reminders[cursor]["enabled"] else "OFF"
+                        message = f"Toggled {status}"
+                elif ch == ord("a"):
+                    # Show type selection
+                    used = {r["type"] for r in reminders}
+                    avail = [rt for rt in REMINDER_TYPES if rt["key"] not in used]
+                    if not avail:
+                        message = "All types already added"
+                        continue
+
+                    safe_addstr(stdscr, h - 1, 0, " " * (w - 1), w - 1)
+                    sel_str = " Select: " + "  ".join(
+                        f"[{i + 1}]{rt['icon']} {rt['label']}" for i, rt in enumerate(avail[:7])
+                    )
+                    safe_addstr(stdscr, h - 1, 0, sel_str, w - 1)
+                    stdscr.refresh()
+
+                    sel_ch = stdscr.getch()
+                    sel_idx = sel_ch - ord("1") if ord("1") <= sel_ch <= ord("9") else -1
+                    if 0 <= sel_idx < len(avail):
+                        chosen = avail[sel_idx]
+                        time_str = textbox_input(stdscr, h - 1, 0, w, f" Time for {chosen['label']} (HH:MM): ")
+                        if time_str:
+                            t = validate_time(time_str)
+                            if t:
+                                reminders.append({
+                                    "type": chosen["key"],
+                                    "times": [t],
+                                    "enabled": True,
+                                })
+                                cursor = len(reminders) - 1
+                                save_state(state)
+                                message = f"Added {chosen['label']} at {t}"
+                            else:
+                                message = "Invalid time format"
+                elif ch == ord("x"):
+                    if reminders:
+                        info = get_type_info(reminders[cursor]["type"])
+                        prompt = f" Delete {info['label']}? (y/n) "
+                        pad = " " * max(0, w - 1 - str_width(prompt))
+                        safe_addstr(stdscr, h - 1, 0, prompt + pad, w - 1, curses.A_REVERSE)
+                        stdscr.refresh()
+                        confirm = stdscr.getch()
+                        if confirm == ord("y"):
+                            reminders.pop(cursor)
+                            if cursor >= len(reminders) and cursor > 0:
+                                cursor -= 1
+                            save_state(state)
+                            message = "Deleted"
+                        else:
+                            message = "Cancelled"
+                elif ch == ord("t"):
+                    if reminders:
+                        tcursor = 0
+                        mode = "times"
+
+            elif mode == "times":
+                # ── Time editing for selected reminder ──
+                rem = reminders[cursor]
+                info = get_type_info(rem["type"])
+                times = rem.get("times", [])
+
+                sub_header = f" {info['icon']}  {info['label']} - Times"
+                stdscr.attron(curses.A_BOLD)
+                safe_addstr(stdscr, 2, 0, sub_header, w - 1)
+                stdscr.attroff(curses.A_BOLD)
+                safe_addstr(stdscr, 3, 0, "─" * (w - 1), w - 1)
+
+                if tcursor >= len(times):
+                    tcursor = max(0, len(times) - 1)
+
+                for i, t in enumerate(times):
+                    row = 4 + i
+                    if row >= h - 2:
+                        break
+                    prefix = f" {ICON_CURSOR} " if i == tcursor else "   "
+                    line = f"{prefix}{t}"
+                    attr = curses.A_REVERSE if i == tcursor else 0
+                    safe_addstr(stdscr, row, 0, line, w - 1, attr)
+
+                if not times:
+                    safe_addstr(stdscr, 4, 0, " No times set", w - 1)
+
+                safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+                if message:
+                    footer = f" {message}"
+                else:
+                    footer = " a:Add time  x:Del time  e:Edit time  ESC:Back"
+                safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+                stdscr.refresh()
+                message = ""
+
+                ch = stdscr.getch()
+
+                if ch == 27:  # ESC
+                    tcursor = 0
+                    mode = "list"
+                elif ch == ord("j") or ch == curses.KEY_DOWN:
+                    if times and tcursor < len(times) - 1:
+                        tcursor += 1
+                elif ch == ord("k") or ch == curses.KEY_UP:
+                    if tcursor > 0:
+                        tcursor -= 1
+                elif ch == ord("a"):
+                    time_str = textbox_input(stdscr, h - 1, 0, w, " Add time (HH:MM): ")
                     if time_str:
                         t = validate_time(time_str)
                         if t:
-                            reminders.append({
-                                "type": chosen["key"],
-                                "times": [t],
-                                "enabled": True,
-                            })
-                            cursor = len(reminders) - 1
-                            save_state(state)
-                            message = f"Added {chosen['label']} at {t}"
-                        else:
-                            message = "Invalid time format"
-            elif ch == ord("x"):
-                if reminders:
-                    info = get_type_info(reminders[cursor]["type"])
-                    prompt = f" Delete {info['label']}? (y/n) "
-                    pad = " " * max(0, w - 1 - str_width(prompt))
-                    safe_addstr(stdscr, h - 1, 0, prompt + pad, w - 1, curses.A_REVERSE)
-                    stdscr.refresh()
-                    confirm = stdscr.getch()
-                    if confirm == ord("y"):
-                        reminders.pop(cursor)
-                        if cursor >= len(reminders) and cursor > 0:
-                            cursor -= 1
-                        save_state(state)
-                        message = "Deleted"
-                    else:
-                        message = "Cancelled"
-            elif ch == ord("t"):
-                if reminders:
-                    mode = "times"
-
-        elif mode == "times":
-            # ── Time editing for selected reminder ──
-            rem = reminders[cursor]
-            info = get_type_info(rem["type"])
-            times = rem.get("times", [])
-
-            sub_header = f" {info['icon']}  {info['label']} - Times"
-            stdscr.attron(curses.A_BOLD)
-            safe_addstr(stdscr, 2, 0, sub_header, w - 1)
-            stdscr.attroff(curses.A_BOLD)
-            safe_addstr(stdscr, 3, 0, "─" * (w - 1), w - 1)
-
-            # Time cursor (reuse a local variable)
-            if not hasattr(settings_screen, "_tcursor"):
-                settings_screen._tcursor = 0
-            tcursor = settings_screen._tcursor
-            if tcursor >= len(times):
-                tcursor = max(0, len(times) - 1)
-                settings_screen._tcursor = tcursor
-
-            for i, t in enumerate(times):
-                row = 4 + i
-                if row >= h - 2:
-                    break
-                prefix = f" {ICON_CURSOR} " if i == tcursor else "   "
-                line = f"{prefix}{t}"
-                attr = curses.A_REVERSE if i == tcursor else 0
-                safe_addstr(stdscr, row, 0, line, w - 1, attr)
-
-            if not times:
-                safe_addstr(stdscr, 4, 0, " No times set", w - 1)
-
-            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
-            if message:
-                footer = f" {message}"
-            else:
-                footer = " a:Add time  x:Del time  e:Edit time  ESC:Back"
-            safe_addstr(stdscr, h - 1, 0, footer, w - 1)
-
-            stdscr.refresh()
-            message = ""
-
-            ch = stdscr.getch()
-
-            if ch == 27:  # ESC
-                settings_screen._tcursor = 0
-                mode = "list"
-            elif ch == ord("j") or ch == curses.KEY_DOWN:
-                if times and tcursor < len(times) - 1:
-                    settings_screen._tcursor = tcursor + 1
-            elif ch == ord("k") or ch == curses.KEY_UP:
-                if tcursor > 0:
-                    settings_screen._tcursor = tcursor - 1
-            elif ch == ord("a"):
-                time_str = textbox_input(stdscr, h - 1, 0, w, " Add time (HH:MM): ")
-                if time_str:
-                    t = validate_time(time_str)
-                    if t:
-                        times.append(t)
-                        times.sort()
-                        rem["times"] = times
-                        save_state(state)
-                        message = f"Added {t}"
-                    else:
-                        message = "Invalid time format"
-            elif ch == ord("x"):
-                if times:
-                    removed = times.pop(tcursor)
-                    if tcursor >= len(times) and tcursor > 0:
-                        settings_screen._tcursor = tcursor - 1
-                    rem["times"] = times
-                    save_state(state)
-                    message = f"Removed {removed}"
-            elif ch == ord("e"):
-                if times:
-                    old = times[tcursor]
-                    new_str = textbox_input(stdscr, h - 1, 0, w, " Edit time (HH:MM): ", old)
-                    if new_str:
-                        t = validate_time(new_str)
-                        if t:
-                            times[tcursor] = t
+                            times.append(t)
                             times.sort()
                             rem["times"] = times
                             save_state(state)
-                            message = f"Changed to {t}"
+                            message = f"Added {t}"
                         else:
                             message = "Invalid time format"
+                elif ch == ord("x"):
+                    if times:
+                        removed = times.pop(tcursor)
+                        if tcursor >= len(times) and tcursor > 0:
+                            tcursor -= 1
+                        rem["times"] = times
+                        save_state(state)
+                        message = f"Removed {removed}"
+                elif ch == ord("e"):
+                    if times:
+                        old = times[tcursor]
+                        new_str = textbox_input(stdscr, h - 1, 0, w, " Edit time (HH:MM): ", old)
+                        if new_str:
+                            t = validate_time(new_str)
+                            if t:
+                                times[tcursor] = t
+                                times.sort()
+                                rem["times"] = times
+                                save_state(state)
+                                message = f"Changed to {t}"
+                            else:
+                                message = "Invalid time format"
+    finally:
+        # メイン画面に戻る前にhalfdelayを復元
+        curses.halfdelay(10)
 
 
 # ── Main screen ───────────────────────────────────────────────
@@ -436,6 +442,16 @@ def main(stdscr):
         now = time.time()
         stdscr.erase()
         h, w = stdscr.getmaxyx()
+
+        # 日付が変わったらdone/snoozedをリセット
+        today = datetime.now().strftime("%Y-%m-%d")
+        if state.get("date") != today:
+            state["date"] = today
+            state["done"] = {}
+            state["snoozed"] = {}
+            save_state(state)
+            cursor = 0
+            message = "New day - reminders reset!"
 
         timeline = build_timeline(state)
         alerts = check_alerts(timeline)
