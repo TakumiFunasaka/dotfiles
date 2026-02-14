@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""p - Pomodoro timer + clock TUI"""
+
+import curses
+import time
+import unicodedata
+from datetime import datetime
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+# ── Progress bar ──────────────────────────────────────────────
+
+
+def progress_bar(elapsed, total, width):
+    if total <= 0 or width <= 0:
+        return ""
+    ratio = min(elapsed / total, 1.0)
+    filled = int(ratio * width)
+    return "\u258b" * filled + "\u2591" * (width - filled)
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+    curses.halfdelay(10)  # 100ms timeout
+
+    # State
+    state = "idle"  # idle, work, break_, paused
+    work_mins = 25
+    break_mins = 5
+    sessions = 0
+    start_time = 0.0
+    elapsed_before_pause = 0.0  # accumulated time before pause
+
+    while True:
+        now = time.time()
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        # ── Line 1: status ──
+        if state == "idle":
+            dt = datetime.now()
+            clock = dt.strftime("%H:%M:%S")
+            dayinfo = dt.strftime("%a %m/%d")
+            left_part = f" {clock}  {dayinfo}"
+            right_part = f"#{sessions}"
+            gap = w - 1 - str_width(left_part) - len(right_part)
+            line1 = left_part + " " * max(1, gap) + right_part
+        elif state == "work":
+            total_secs = work_mins * 60
+            elapsed = elapsed_before_pause + (now - start_time)
+            remaining = max(0, total_secs - elapsed)
+            mins = int(remaining) // 60
+            secs = int(remaining) % 60
+            timer_str = f"{mins}:{secs:02d}"
+            left_part = f" WORK  {timer_str}  "
+            right_part = f"  #{sessions}"
+            bar_width = w - 1 - str_width(left_part) - len(right_part)
+            bar = progress_bar(elapsed, total_secs, max(0, bar_width))
+            line1 = left_part + bar + right_part
+            # Check completion
+            if remaining <= 0:
+                curses.beep()
+                print("\a", end="", flush=True)
+                state = "break_"
+                start_time = now
+                elapsed_before_pause = 0.0
+        elif state == "break_":
+            total_secs = break_mins * 60
+            elapsed = elapsed_before_pause + (now - start_time)
+            remaining = max(0, total_secs - elapsed)
+            mins = int(remaining) // 60
+            secs = int(remaining) % 60
+            timer_str = f"{mins}:{secs:02d}"
+            left_part = f" \u2615 BREAK  {timer_str}  "
+            right_part = f"  #{sessions}"
+            bar_width = w - 1 - str_width(left_part) - len(right_part)
+            bar = progress_bar(elapsed, total_secs, max(0, bar_width))
+            line1 = left_part + bar + right_part
+            # Check completion
+            if remaining <= 0:
+                curses.beep()
+                print("\a", end="", flush=True)
+                sessions += 1
+                state = "idle"
+                elapsed_before_pause = 0.0
+        elif state == "paused":
+            total_secs = work_mins * 60
+            remaining = max(0, total_secs - elapsed_before_pause)
+            mins = int(remaining) // 60
+            secs = int(remaining) % 60
+            timer_str = f"{mins}:{secs:02d}"
+            left_part = f" \U0001f345 PAUSE {timer_str}  "
+            right_part = f"  #{sessions}"
+            bar_width = w - 1 - str_width(left_part) - len(right_part)
+            bar = progress_bar(elapsed_before_pause, total_secs, max(0, bar_width))
+            line1 = left_part + bar + right_part
+
+        safe_addstr(stdscr, 0, 0, line1, w - 1)
+
+        # ── Line 2: separator ──
+        if h > 1:
+            safe_addstr(stdscr, 1, 0, "\u2500" * (w - 1), w - 1)
+
+        # ── Line 3: footer ──
+        if h > 2:
+            if state == "idle":
+                footer = f" s:Start  w{work_mins}/b{break_mins}  q:Quit"
+            elif state == "work":
+                footer = " p:Pause  x:Stop  q:Quit"
+            elif state == "break_":
+                footer = " x:Skip  q:Quit"
+            elif state == "paused":
+                footer = " p:Resume  x:Stop  q:Quit"
+            safe_addstr(stdscr, 2, 0, footer, w - 1)
+
+        stdscr.refresh()
+
+        # ── Key input ──
+        try:
+            ch = stdscr.getch()
+        except curses.error:
+            continue
+
+        if ch == -1:
+            continue
+        elif ch == ord("q"):
+            break
+        elif ch == ord("s") and state == "idle":
+            state = "work"
+            start_time = now
+            elapsed_before_pause = 0.0
+        elif ch == ord("p") and state == "work":
+            elapsed_before_pause += now - start_time
+            state = "paused"
+        elif ch == ord("p") and state == "paused":
+            state = "work"
+            start_time = now
+        elif ch == ord("x") and state in ("work", "paused"):
+            state = "idle"
+            elapsed_before_pause = 0.0
+        elif ch == ord("x") and state == "break_":
+            state = "idle"
+            sessions += 1
+            elapsed_before_pause = 0.0
+        elif ch == ord("w") and state == "idle":
+            work_mins = min(60, work_mins + 5)
+        elif ch == ord("W") and state == "idle":
+            work_mins = max(5, work_mins - 5)
+        elif ch == ord("b") and state == "idle":
+            break_mins = min(30, break_mins + 1)
+        elif ch == ord("B") and state == "idle":
+            break_mins = max(1, break_mins - 1)
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)
