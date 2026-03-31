@@ -439,7 +439,6 @@ def main(stdscr):
     state = load_state()
     cursor = 0
     message = ""
-    last_beep = 0
 
     while True:
         now = time.time()
@@ -459,11 +458,6 @@ def main(stdscr):
         timeline = build_timeline(state)
         alerts = check_alerts(timeline)
 
-        # Beep for alerts (once per minute)
-        if alerts and now - last_beep > 60:
-            curses.beep()
-            print("\a", end="", flush=True)
-            last_beep = now
 
         # ── Header ──
         now_str = datetime.now().strftime("%H:%M")

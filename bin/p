@@ -96,7 +96,6 @@ def main(stdscr):
             line1 = left_part + bar + right_part
             # Check completion
             if remaining <= 0:
-                curses.beep()
                 state = "break_"
                 start_time = now
                 elapsed_before_pause = 0.0
@@ -114,7 +113,6 @@ def main(stdscr):
             line1 = left_part + bar + right_part
             # Check completion
             if remaining <= 0:
-                curses.beep()
                 sessions += 1
                 state = "idle"
                 elapsed_before_pause = 0.0

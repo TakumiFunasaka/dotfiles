@@ -1,0 +1,578 @@
+#!/usr/bin/env python3
+"""x - Terminal mini-games (Wordle, Snake, 2048)"""
+
+import curses
+import random
+import time
+
+# ── Color pair IDs ────────────────────────────────────────────
+
+C_CORRECT = 1
+C_PRESENT = 2
+C_SNAKE = 3
+C_FOOD = 4
+
+# ── Word list for Wordle ─────────────────────────────────────
+
+WORDS = (
+    "about above abuse actor acute admit adopt adult after again agent agree "
+    "ahead alarm album alert alien align alive allow alone along alter among "
+    "angel anger angle angry apart apple apply arena argue arise armor array "
+    "aside asset avoid award aware awful basic basis beach begin being below "
+    "bench birth black blade blame blank blast blaze bleed blend blind block "
+    "blood bloom blown board bonus boost bound brain brand brave bread break "
+    "breed brick brief bring broad brown brush build bunch burst cabin candy "
+    "carry catch cause chain chair charm chart chase cheap check chest chief "
+    "child chunk claim class clean clear climb clock clone close cloud coach "
+    "coast coral could count court cover crack craft crane crash crazy cream "
+    "crime cross crowd crown crush curve cycle daily dance death debut delay "
+    "depth dirty doubt draft drain drama drawn dream dress drift drink drive "
+    "earth eight elect elite email empty enemy enjoy enter entry equal error "
+    "essay event every exact exist extra faith false fault fiber field fifth "
+    "fifty fight final first fixed flame flash fleet flesh float flood floor "
+    "fluid flush focus force forge forth forum found frame frank fraud fresh "
+    "front fruit fully funny ghost giant given glass globe glory going grace "
+    "grade grain grand grant graph grasp grass grave great green grief grill "
+    "grind gross group grove grown guard guess guest guide guilt happy harsh "
+    "heart heavy hence honor horse hotel house human humor hurry ideal image "
+    "imply index inner input issue joint judge juice knock known label labor "
+    "large laser later laugh layer learn least leave legal lemon level light "
+    "limit liver local logic loose lover lower lucky lunch magic major maker "
+    "manor maple march match mayor media mercy metal might minor minus model "
+    "money month moral motor mount mouse mouth movie music naive nerve never "
+    "night noble noise north noted novel nurse occur ocean offer often opera "
+    "orbit order other outer ought owner paint panel panic paper party paste "
+    "patch pause peace pearl penny phase phone photo piano piece pilot pitch "
+    "pixel place plain plane plant plate plaza point pound power press price "
+    "pride prime print prior prize probe proof proud prove pulse punch pupil "
+    "queen query quest queue quick quiet quite quote radar radio raise range "
+    "rapid ratio reach ready realm rebel refer reign relax reply rider ridge "
+    "rifle right rigid rival river robot rocky rough round route royal rugby "
+    "rural sadly saint salad scale scene scope score sense serve seven shade "
+    "shaft shake shall shame shape share shark sharp shelf shell shift shine "
+    "shirt shock shoot shore short shout shown sight since sixth sixty skill "
+    "skull slash sleep slice slide slope smart smell smile smoke snake solar "
+    "solid solve sorry sound south space spare speak speed spend spent spine "
+    "spite split spoke sport spray squad stack staff stage stain stake stand "
+    "start state steak steal steam steel steep steer stern stick stiff still "
+    "stock stone stood store storm story stove strap strip stuck study stuff "
+    "style sugar super surge swamp swear sweep sweet swift swing sword table "
+    "taste teach teeth theme thick thing think third those three threw throw "
+    "thumb tiger tight timer tired title toast today token topic total touch "
+    "tough tower toxic trace track trade trail train trait trash treat trend "
+    "trial tribe trick truck truly trunk trust truth tumor twice ultra uncle "
+    "under union unite unity until upper upset urban usage usual valid value "
+    "video viral virus visit vital vocal voice voter waste watch water weigh "
+    "weird wheel where which while white whole whose width woman world worry "
+    "worse worst worth would wound write wrong wrote yield young youth"
+).split()
+
+
+# ── Utilities ─────────────────────────────────────────────────
+
+
+def safe_addstr(win, y, x, text, attr=0):
+    try:
+        win.addstr(y, x, text, attr)
+    except curses.error:
+        pass
+
+
+# ── Wordle ────────────────────────────────────────────────────
+
+
+def check_guess(guess, answer):
+    result = ["absent"] * 5
+    remaining = list(answer)
+    for i in range(5):
+        if guess[i] == answer[i]:
+            result[i] = "correct"
+            remaining[i] = None
+    for i in range(5):
+        if result[i] == "correct":
+            continue
+        if guess[i] in remaining:
+            result[i] = "present"
+            remaining[remaining.index(guess[i])] = None
+    return result
+
+
+def play_wordle(stdscr):
+    answer = random.choice(WORDS).upper()
+    guesses = []
+    kb_state = {}
+    buf = ""
+    msg = ""
+    done = False
+    won = False
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+        gw, gh = 30, 15
+        ox = max(0, (w - gw) // 2)
+        oy = max(0, (h - gh) // 2)
+
+        # Header
+        safe_addstr(stdscr, oy, ox, f" Wordle ({len(guesses)}/6)", curses.A_BOLD)
+        safe_addstr(stdscr, oy + 1, ox, "─" * gw)
+
+        # 6 guess rows
+        for i in range(6):
+            ry = oy + 2 + i
+            if i < len(guesses):
+                g, res = guesses[i]
+                for j in range(5):
+                    if res[j] == "correct":
+                        attr = curses.color_pair(C_CORRECT) | curses.A_BOLD
+                    elif res[j] == "present":
+                        attr = curses.color_pair(C_PRESENT) | curses.A_BOLD
+                    else:
+                        attr = curses.A_DIM
+                    safe_addstr(stdscr, ry, ox + 4 + j * 4, f" {g[j]} ", attr)
+            elif i == len(guesses) and not done:
+                for j in range(5):
+                    c = buf[j] if j < len(buf) else "·"
+                    safe_addstr(stdscr, ry, ox + 4 + j * 4, f" {c} ")
+            else:
+                for j in range(5):
+                    safe_addstr(stdscr, ry, ox + 4 + j * 4, " · ", curses.A_DIM)
+
+        # Keyboard
+        kb_rows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"]
+        for ki, kr in enumerate(kb_rows):
+            ky = oy + 9 + ki
+            kx = ox + 1 + ki
+            for kj, letter in enumerate(kr):
+                st = kb_state.get(letter)
+                if st == "correct":
+                    attr = curses.color_pair(C_CORRECT) | curses.A_BOLD
+                elif st == "present":
+                    attr = curses.color_pair(C_PRESENT) | curses.A_BOLD
+                elif st == "absent":
+                    attr = curses.A_DIM
+                else:
+                    attr = 0
+                safe_addstr(stdscr, ky, kx + kj * 3, f" {letter}", attr)
+
+        # Footer
+        safe_addstr(stdscr, oy + 12, ox, "─" * gw)
+        if msg:
+            safe_addstr(stdscr, oy + 13, ox, f" {msg}")
+        elif done:
+            safe_addstr(stdscr, oy + 13, ox, " r:Restart  ESC:Menu")
+        else:
+            safe_addstr(stdscr, oy + 13, ox, " Type+Enter  Bksp:Del  ESC:Menu")
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == 27:
+            return
+
+        if done:
+            if key == ord("r"):
+                answer = random.choice(WORDS).upper()
+                guesses, kb_state, buf, msg = [], {}, "", ""
+                done, won = False, False
+            continue
+
+        if key in (curses.KEY_BACKSPACE, 127, 8):
+            if buf:
+                buf = buf[:-1]
+                msg = ""
+        elif key in (curses.KEY_ENTER, 10, 13):
+            if len(buf) == 5:
+                res = check_guess(buf, answer)
+                guesses.append((buf, res))
+                for j, letter in enumerate(buf):
+                    s = res[j]
+                    if s == "correct":
+                        kb_state[letter] = "correct"
+                    elif s == "present" and kb_state.get(letter) != "correct":
+                        kb_state[letter] = "present"
+                    elif letter not in kb_state:
+                        kb_state[letter] = "absent"
+                if buf == answer:
+                    done, won = True, True
+                    msg = f"Correct! ({len(guesses)}/6)"
+                elif len(guesses) >= 6:
+                    done = True
+                    msg = f"Answer: {answer}"
+                buf = ""
+            else:
+                msg = "Need 5 letters"
+        elif 0 <= key <= 255:
+            c = chr(key).upper()
+            if c.isalpha() and len(buf) < 5:
+                buf += c
+                msg = ""
+
+
+# ── Snake ─────────────────────────────────────────────────────
+
+
+def play_snake(stdscr):
+    FW, FH = 24, 14
+
+    def init_state():
+        snake = [(FH // 2, FW // 2 - i) for i in range(4)]
+        return snake, (0, 1), 0, False
+
+    def place_food(snake):
+        while True:
+            pos = (random.randint(0, FH - 1), random.randint(0, FW - 1))
+            if pos not in snake:
+                return pos
+
+    snake, direction, score, dead = init_state()
+    food = place_food(snake)
+
+    stdscr.timeout(150)
+    try:
+        while True:
+            stdscr.erase()
+            h, w = stdscr.getmaxyx()
+            gw = FW + 2
+            gh = FH + 4
+            ox = max(0, (w - gw) // 2)
+            oy = max(0, (h - gh) // 2)
+
+            # Header
+            safe_addstr(stdscr, oy, ox, f" Snake  Score:{score}", curses.A_BOLD)
+
+            # Border
+            safe_addstr(stdscr, oy + 1, ox, "┌" + "─" * FW + "┐")
+            for r in range(FH):
+                safe_addstr(stdscr, oy + 2 + r, ox, "│")
+                safe_addstr(stdscr, oy + 2 + r, ox + FW + 1, "│")
+            safe_addstr(stdscr, oy + 2 + FH, ox, "└" + "─" * FW + "┘")
+
+            # Snake
+            for i, (sy, sx) in enumerate(snake):
+                if i == 0:
+                    safe_addstr(
+                        stdscr, oy + 2 + sy, ox + 1 + sx, "@",
+                        curses.color_pair(C_SNAKE) | curses.A_BOLD,
+                    )
+                else:
+                    safe_addstr(
+                        stdscr, oy + 2 + sy, ox + 1 + sx, "o",
+                        curses.color_pair(C_SNAKE),
+                    )
+
+            # Food
+            safe_addstr(
+                stdscr, oy + 2 + food[0], ox + 1 + food[1], "*",
+                curses.color_pair(C_FOOD) | curses.A_BOLD,
+            )
+
+            # Footer
+            fy = oy + 3 + FH
+            safe_addstr(stdscr, fy, ox, "─" * gw)
+            if dead:
+                safe_addstr(stdscr, fy + 1, ox, " Game Over! r:Restart ESC:Menu")
+            else:
+                safe_addstr(stdscr, fy + 1, ox, " h/j/k/l:Move  ESC:Menu")
+
+            stdscr.refresh()
+            key = stdscr.getch()
+
+            if key == 27:
+                return
+            if key == ord("q"):
+                return
+
+            if dead:
+                if key == ord("r"):
+                    snake, direction, score, dead = init_state()
+                    food = place_food(snake)
+                continue
+
+            # Direction
+            new_d = direction
+            if key in (ord("h"), curses.KEY_LEFT):
+                new_d = (0, -1)
+            elif key in (ord("l"), curses.KEY_RIGHT):
+                new_d = (0, 1)
+            elif key in (ord("k"), curses.KEY_UP):
+                new_d = (-1, 0)
+            elif key in (ord("j"), curses.KEY_DOWN):
+                new_d = (1, 0)
+
+            # Prevent 180-degree turn
+            if (new_d[0] + direction[0], new_d[1] + direction[1]) != (0, 0):
+                direction = new_d
+
+            # Move
+            ny = snake[0][0] + direction[0]
+            nx = snake[0][1] + direction[1]
+
+            if ny < 0 or ny >= FH or nx < 0 or nx >= FW or (ny, nx) in snake:
+                dead = True
+                continue
+
+            snake.insert(0, (ny, nx))
+
+            if (ny, nx) == food:
+                score += 1
+                food = place_food(snake)
+            else:
+                snake.pop()
+    finally:
+        stdscr.timeout(-1)
+
+
+# ── 2048 ──────────────────────────────────────────────────────
+
+CELL_W = 4
+
+
+def slide_row(row):
+    tiles = [v for v in row if v]
+    merged = []
+    score = 0
+    i = 0
+    while i < len(tiles):
+        if i + 1 < len(tiles) and tiles[i] == tiles[i + 1]:
+            val = tiles[i] * 2
+            merged.append(val)
+            score += val
+            i += 2
+        else:
+            merged.append(tiles[i])
+            i += 1
+    return merged + [0] * (4 - len(merged)), score
+
+
+def move_left(board):
+    nb, sc, mv = [], 0, False
+    for row in board:
+        nr, s = slide_row(row)
+        nb.append(nr)
+        sc += s
+        if nr != row:
+            mv = True
+    return nb, sc, mv
+
+
+def move_right(board):
+    nb, sc, mv = [], 0, False
+    for row in board:
+        nr, s = slide_row(row[::-1])
+        nr = nr[::-1]
+        nb.append(nr)
+        sc += s
+        if nr != row:
+            mv = True
+    return nb, sc, mv
+
+
+def transpose(b):
+    return [list(c) for c in zip(*b)]
+
+
+def move_up(board):
+    t = transpose(board)
+    nt, sc, mv = move_left(t)
+    return transpose(nt), sc, mv
+
+
+def move_down(board):
+    t = transpose(board)
+    nt, sc, mv = move_right(t)
+    return transpose(nt), sc, mv
+
+
+def can_move(board):
+    for r in range(4):
+        for c in range(4):
+            if board[r][c] == 0:
+                return True
+            if c < 3 and board[r][c] == board[r][c + 1]:
+                return True
+            if r < 3 and board[r][c] == board[r + 1][c]:
+                return True
+    return False
+
+
+def add_tile(board):
+    empty = [(r, c) for r in range(4) for c in range(4) if board[r][c] == 0]
+    if empty:
+        r, c = random.choice(empty)
+        board[r][c] = 4 if random.random() < 0.1 else 2
+
+
+def fmt_tile(val):
+    if val == 0:
+        return " " * CELL_W
+    s = str(val)
+    if len(s) <= CELL_W:
+        return s.rjust(CELL_W)
+    return f"{val // 1024}K".rjust(CELL_W)
+
+
+def play_2048(stdscr):
+    board = [[0] * 4 for _ in range(4)]
+    add_tile(board)
+    add_tile(board)
+    score = 0
+    dead = False
+    won = False
+    msg = ""
+
+    def hline(l, m, r):
+        return l + (("─" * CELL_W) + m) * 3 + ("─" * CELL_W) + r
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+        gw = CELL_W * 4 + 5
+        gh = 13
+        ox = max(0, (w - gw) // 2)
+        oy = max(0, (h - gh) // 2)
+
+        # Header
+        safe_addstr(stdscr, oy, ox, f" 2048  Score:{score}", curses.A_BOLD)
+        safe_addstr(stdscr, oy + 1, ox, "─" * gw)
+
+        # Grid
+        gy = oy + 2
+        safe_addstr(stdscr, gy, ox, hline("┌", "┬", "┐"))
+
+        for r in range(4):
+            dy = gy + 1 + r * 2
+            for c in range(4):
+                safe_addstr(stdscr, dy, ox + c * (CELL_W + 1), "│")
+                val = board[r][c]
+                txt = fmt_tile(val)
+                attr = 0
+                if val >= 512:
+                    attr = curses.A_REVERSE | curses.A_BOLD
+                elif val >= 64:
+                    attr = curses.A_BOLD
+                elif val == 0:
+                    attr = curses.A_DIM
+                safe_addstr(stdscr, dy, ox + 1 + c * (CELL_W + 1), txt, attr)
+            safe_addstr(stdscr, dy, ox + 4 * (CELL_W + 1), "│")
+
+            if r < 3:
+                safe_addstr(stdscr, dy + 1, ox, hline("├", "┼", "┤"))
+
+        safe_addstr(stdscr, gy + 8, ox, hline("└", "┴", "┘"))
+
+        # Footer
+        fy = gy + 9
+        safe_addstr(stdscr, fy, ox, "─" * gw)
+        if msg:
+            safe_addstr(stdscr, fy + 1, ox, f" {msg}")
+        elif dead:
+            safe_addstr(stdscr, fy + 1, ox, " Game Over! r:New  q:Menu")
+        else:
+            safe_addstr(stdscr, fy + 1, ox, " h/j/k/l:Move  r:New  q:Menu")
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == ord("q") or key == 27:
+            return
+
+        if dead:
+            if key == ord("r"):
+                board = [[0] * 4 for _ in range(4)]
+                add_tile(board)
+                add_tile(board)
+                score, dead, won, msg = 0, False, False, ""
+            continue
+
+        if key == ord("r"):
+            board = [[0] * 4 for _ in range(4)]
+            add_tile(board)
+            add_tile(board)
+            score, dead, won, msg = 0, False, False, ""
+            continue
+
+        moved = False
+        if key in (ord("h"), curses.KEY_LEFT):
+            board, s, moved = move_left(board)
+            score += s
+        elif key in (ord("l"), curses.KEY_RIGHT):
+            board, s, moved = move_right(board)
+            score += s
+        elif key in (ord("k"), curses.KEY_UP):
+            board, s, moved = move_up(board)
+            score += s
+        elif key in (ord("j"), curses.KEY_DOWN):
+            board, s, moved = move_down(board)
+            score += s
+
+        if moved:
+            add_tile(board)
+            if not won and any(
+                board[r][c] >= 2048 for r in range(4) for c in range(4)
+            ):
+                won = True
+                msg = "You win! Keep going or r:New"
+            if not can_move(board):
+                dead = True
+                msg = "Game Over!"
+
+
+# ── Menu ──────────────────────────────────────────────────────
+
+GAMES = [
+    ("1", "Wordle", play_wordle),
+    ("2", "Snake", play_snake),
+    ("3", "2048", play_2048),
+]
+
+
+def menu(stdscr):
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+        gw, gh = 22, 8
+        ox = max(0, (w - gw) // 2)
+        oy = max(0, (h - gh) // 2)
+
+        safe_addstr(stdscr, oy, ox, " Games", curses.A_BOLD)
+        safe_addstr(stdscr, oy + 1, ox, "─" * gw)
+
+        for i, (key, name, _) in enumerate(GAMES):
+            safe_addstr(stdscr, oy + 2 + i, ox, f"   {key}. {name}")
+
+        safe_addstr(stdscr, oy + 5, ox, "─" * gw)
+        safe_addstr(stdscr, oy + 6, ox, " 1-3:Play  q:Quit")
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == ord("q") or key == 27:
+            return
+
+        for gkey, _, func in GAMES:
+            if key == ord(gkey):
+                func(stdscr)
+                break
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    curses.start_color()
+    curses.init_pair(C_CORRECT, curses.COLOR_WHITE, curses.COLOR_GREEN)
+    curses.init_pair(C_PRESENT, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+    curses.init_pair(C_SNAKE, curses.COLOR_GREEN, -1)
+    curses.init_pair(C_FOOD, curses.COLOR_RED, -1)
+    stdscr.keypad(True)
+    menu(stdscr)
+
+
+if __name__ == "__main__":
+    try:
+        curses.wrapper(main)
+    except KeyboardInterrupt:
+        pass

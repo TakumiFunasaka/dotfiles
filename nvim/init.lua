@@ -225,3 +225,13 @@ require('lazy').setup({
     colorscheme = { 'gruvbox' },
   },
 })
+
+-- ----------------------------------------------------------------------------
+-- ファイルタイプ自動検出
+-- ----------------------------------------------------------------------------
+vim.api.nvim_create_autocmd({'BufRead', 'BufNewFile'}, {
+  pattern = vim.fn.expand('~') .. '/workspace/banban-workspace/queries/*',
+  callback = function()
+    vim.bo.filetype = 'sql'
+  end,
+})
