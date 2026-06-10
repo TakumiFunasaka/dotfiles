@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""l - Launcher TUI (browse and launch the single-letter tools)"""
+
+import curses
+import os
+import re
+import unicodedata
+
+BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+IGNORE = {"__pycache__"}
+RESERVED_KEYS = {"j", "k", "g", "G", "q"}
+
+# Nerd Font icons
+ICON_LAUNCH = ""  # rocket
+ICON_CURSOR = ""  # chevron
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    cp = ord(ch)
+    if 0xE000 <= cp <= 0xF8FF or 0xF0000 <= cp <= 0xFFFFD or 0x100000 <= cp <= 0x10FFFD:
+        return 2
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+# ── Tool discovery ────────────────────────────────────────────
+
+
+def extract_description(path):
+    """Return the first docstring line ('name - description') or ''."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            head = f.read(2048)
+    except OSError:
+        return ""
+    m = re.search(r'"""(.+?)(?:\n|""")', head)
+    if not m:
+        return ""
+    return m.group(1).strip().rstrip('"')
+
+
+def discover_tools():
+    """Return list of (name, description, path) for executables in bin/."""
+    self_path = os.path.abspath(__file__)
+    tools = []
+    try:
+        for entry in sorted(os.listdir(BIN_DIR)):
+            if entry in IGNORE:
+                continue
+            path = os.path.join(BIN_DIR, entry)
+            if not os.path.isfile(path) or not os.access(path, os.X_OK):
+                continue
+            if os.path.abspath(path) == self_path:
+                continue
+            desc = extract_description(path)
+            # Strip the leading "name - " if the docstring repeats it
+            prefix = f"{entry} - "
+            if desc.startswith(prefix):
+                desc = desc[len(prefix):]
+            tools.append((entry, desc, path))
+    except OSError:
+        pass
+    return tools
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+
+    tools = discover_tools()
+    direct = {name: path for name, _, path in tools if len(name) == 1 and name not in RESERVED_KEYS}
+    cursor = 0
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        # Header
+        header = f" {ICON_LAUNCH} Launcher ({len(tools)} tools)"
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        sep = "─" * (w - 1)
+        safe_addstr(stdscr, 1, 0, sep, w - 1)
+
+        # Tool list
+        name_w = max((len(name) for name, _, _ in tools), default=1)
+        row = 2
+        for i, (name, desc, _) in enumerate(tools):
+            if row >= h - 2:
+                break
+            prefix = f" {ICON_CURSOR} " if i == cursor else "   "
+            line = f"{prefix}{name:<{name_w}}  {desc}"
+            attr = curses.A_REVERSE if i == cursor else 0
+            pad_needed = w - 1 - str_width(line)
+            if pad_needed > 0:
+                line += " " * pad_needed
+            safe_addstr(stdscr, row, 0, line, w - 1, attr)
+            row += 1
+
+        if not tools:
+            safe_addstr(stdscr, 2, 0, " No tools found.", w - 1)
+
+        # Bottom separator
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, sep, w - 1)
+
+        # Footer
+        footer = " j/k:Move  Enter:Launch  <letter>:Direct launch  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+
+        if ch == ord("q"):
+            return None
+        elif ch == ord("j") or ch == curses.KEY_DOWN:
+            if tools and cursor < len(tools) - 1:
+                cursor += 1
+        elif ch == ord("k") or ch == curses.KEY_UP:
+            if cursor > 0:
+                cursor -= 1
+        elif ch == ord("g"):
+            cursor = 0
+        elif ch == ord("G"):
+            if tools:
+                cursor = len(tools) - 1
+        elif ch == ord("\n") or ch == curses.KEY_ENTER:
+            if tools:
+                return tools[cursor][2]
+        elif 0 < ch < 256 and chr(ch) in direct:
+            return direct[chr(ch)]
+
+
+if __name__ == "__main__":
+    selected = curses.wrapper(main)
+    if selected:
+        os.execv(selected, [selected])
