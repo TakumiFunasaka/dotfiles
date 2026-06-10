@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
-"""w - File watcher TUI (monitors file changes in current directory)"""
+"""w - Watcher TUI (file changes / git status, Tab to switch modes)"""
 
 import curses
 import os
+import subprocess
 import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
 
 # Nerd Font icons
-ICON_FILE = "\uf15c"   # 
-ICON_DIR = "\uf07b"    # 
-ICON_ADD = "\uf067"    # 
-ICON_MOD = "\uf040"    # 
-ICON_DEL = "\uf1f8"    # 
-ICON_EYE = "\uf06e"    # 
+ICON_FILE = ""   #
+ICON_DIR = ""    #
+ICON_ADD = ""    #
+ICON_MOD = ""    #
+ICON_DEL = ""    #
+ICON_EYE = ""    #
+ICON_GIT = ""     #
+ICON_BRANCH = ""  #
+ICON_CURSOR = ""  #
 
 IGNORE_DIRS = {".git", "node_modules", "__pycache__", ".next", ".cache", "dist", "build", ".DS_Store"}
 MAX_EVENTS = 200
+
+MODE_FILES = "files"
+MODE_GIT = "git"
 
 
 # ── Display utilities ──────────────────────────────────────────
@@ -25,6 +32,7 @@ MAX_EVENTS = 200
 
 def char_width(ch):
     cp = ord(ch)
+    # Nerd Font ranges (Private Use Area icons are typically rendered as width 2)
     if 0xE000 <= cp <= 0xF8FF or 0xF0000 <= cp <= 0xFFFFD or 0x100000 <= cp <= 0x10FFFD:
         return 2
     ea = unicodedata.east_asian_width(ch)
@@ -83,6 +91,219 @@ def scan_files(root):
     return result
 
 
+# ── Git commands ──────────────────────────────────────────────
+
+
+def git_cmd(args):
+    try:
+        out = subprocess.check_output(
+            ["git"] + args,
+            stderr=subprocess.DEVNULL, text=True, timeout=5,
+        )
+        return out.strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+
+
+def get_branch():
+    return git_cmd(["branch", "--show-current"]) or git_cmd(["rev-parse", "--short", "HEAD"])
+
+
+def get_ahead_behind():
+    out = git_cmd(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
+    if out:
+        parts = out.split()
+        if len(parts) == 2:
+            return int(parts[0]), int(parts[1])
+    return 0, 0
+
+
+def get_status():
+    """Return list of (status_code, filepath)."""
+    out = git_cmd(["status", "--porcelain=v1"])
+    if not out:
+        return []
+    files = []
+    for line in out.split("\n"):
+        if len(line) < 4:
+            continue
+        xy = line[:2]
+        path = line[3:]
+        files.append((xy, path))
+    return files
+
+
+def get_stash_count():
+    out = git_cmd(["stash", "list"])
+    if not out:
+        return 0
+    return len(out.split("\n"))
+
+
+def is_git_repo():
+    return git_cmd(["rev-parse", "--is-inside-work-tree"]) == "true"
+
+
+def status_label(xy):
+    """Convert porcelain status to readable label."""
+    x, y = xy[0], xy[1]
+    if xy == "??":
+        return "?"
+    if xy == "!!":
+        return "!"
+    if x == "A" or y == "A":
+        return "+"
+    if x == "D" or y == "D":
+        return "D"
+    if x == "R" or y == "R":
+        return "R"
+    if x == "M" or y == "M":
+        return "M"
+    if x == "C" or y == "C":
+        return "C"
+    return xy.strip()
+
+
+# ── Files mode ────────────────────────────────────────────────
+
+
+def draw_files_mode(stdscr, h, w, root, events, event_count, paused):
+    # ── Header ──
+    dir_name = os.path.basename(root)
+    status = "PAUSED" if paused else "watching"
+    left = f" {ICON_EYE} {dir_name}  ({status})  [FILES]"
+    right = f" {event_count} changes"
+    gap = w - 1 - str_width(left) - len(right)
+    header = left + " " * max(1, gap) + right
+    stdscr.attron(curses.A_BOLD)
+    safe_addstr(stdscr, 0, 0, header, w - 1)
+    stdscr.attroff(curses.A_BOLD)
+
+    # ── Separator ──
+    if h > 1:
+        safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+    # ── Events ──
+    list_h = h - 4
+    visible = events[-list_h:]
+    for i, (ts, kind, path) in enumerate(visible):
+        row = 2 + i
+        if row >= h - 2:
+            break
+        time_str = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+        if kind == "+":
+            label = "+"
+        elif kind == "M":
+            label = "M"
+        else:
+            label = "D"
+        line = f" {time_str}  {label} {path}"
+        safe_addstr(stdscr, row, 0, line, w - 1)
+
+    if not events:
+        safe_addstr(stdscr, 2, 0, " Waiting for changes...", w - 1)
+
+    # ── Bottom separator ──
+    if h - 2 >= 0:
+        safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+
+    # ── Footer ──
+    footer = " Tab:Git  p:Pause  c:Clear  q:Quit"
+    safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+
+# ── Git mode ──────────────────────────────────────────────────
+
+
+def draw_git_mode(stdscr, h, w, git_ok, branch, ahead, behind, stashes, files, cursor, paused):
+    if not git_ok:
+        left = f" {ICON_GIT} (not a git repository)  [GIT]"
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, left, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+        if h > 1:
+            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+        safe_addstr(stdscr, 2, 0, " Not a git repository", w - 1)
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+        footer = " Tab:Files  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+        return cursor
+
+    # ── Header ──
+    left = f" {ICON_GIT} {ICON_BRANCH} {branch}  [GIT]"
+    indicators = []
+    if ahead:
+        indicators.append(f"⇡{ahead}")
+    if behind:
+        indicators.append(f"⇣{behind}")
+    if stashes:
+        indicators.append(f"stash:{stashes}")
+    if paused:
+        indicators.append("PAUSED")
+    right = "  ".join(indicators)
+    gap = w - 1 - str_width(left) - str_width(right)
+    header = left + " " * max(1, gap) + right
+    stdscr.attron(curses.A_BOLD)
+    safe_addstr(stdscr, 0, 0, header, w - 1)
+    stdscr.attroff(curses.A_BOLD)
+
+    # ── Separator ──
+    if h > 1:
+        safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
+
+    # ── Summary line ──
+    staged = sum(1 for xy, _ in files if xy[0] not in (" ", "?", "!"))
+    modified = sum(1 for xy, _ in files if xy[1] in ("M", "D", "A") and xy[0] != "?")
+    untracked = sum(1 for xy, _ in files if xy == "??")
+    summary_parts = []
+    if staged:
+        summary_parts.append(f"+{staged}")
+    if modified:
+        summary_parts.append(f"!{modified}")
+    if untracked:
+        summary_parts.append(f"?{untracked}")
+    summary = " " + "  ".join(summary_parts) if summary_parts else " Clean"
+    safe_addstr(stdscr, 2, 0, summary, w - 1)
+
+    # ── Separator ──
+    if h > 3:
+        safe_addstr(stdscr, 3, 0, "─" * (w - 1), w - 1)
+
+    # ── File list ──
+    list_top = 4
+    list_h = h - list_top - 2
+    if not files:
+        safe_addstr(stdscr, list_top, 0, " No changes", w - 1)
+    else:
+        if cursor >= len(files):
+            cursor = len(files) - 1
+
+        # Scroll offset
+        scroll = 0
+        if cursor >= list_h:
+            scroll = cursor - list_h + 1
+
+        for i in range(min(list_h, len(files) - scroll)):
+            idx = scroll + i
+            row = list_top + i
+            xy, path = files[idx]
+            label = status_label(xy)
+            prefix = f" {ICON_CURSOR} " if idx == cursor else "   "
+            line = f"{prefix}{label}  {path}"
+            attr = curses.A_REVERSE if idx == cursor else 0
+            safe_addstr(stdscr, row, 0, line, w - 1, attr)
+
+    # ── Bottom separator ──
+    if h - 2 >= 0:
+        safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
+
+    # ── Footer ──
+    footer = " Tab:Files  j/k:Move  p:Pause  r:Refresh  q:Quit"
+    safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+    return cursor
+
+
 # ── Main ──────────────────────────────────────────────────────
 
 
@@ -93,84 +314,65 @@ def main(stdscr):
     curses.halfdelay(20)  # 200ms
 
     root = os.getcwd()
+    mode = MODE_FILES
+    paused = False
+
+    # Files mode state
     prev_snapshot = scan_files(root)
     events = []
-    scroll = 0
-    paused = False
     event_count = 0
+
+    # Git mode state
+    git_ok = is_git_repo()
+    files = []
+    branch = ""
+    ahead, behind = 0, 0
+    stashes = 0
+    last_scan = 0
+    scan_interval = 2
+    cursor = 0
 
     while True:
         now = time.time()
         stdscr.erase()
         h, w = stdscr.getmaxyx()
 
-        # Scan for changes
-        if not paused:
-            curr_snapshot = scan_files(root)
+        if mode == MODE_FILES:
+            # Scan for changes
+            if not paused:
+                curr_snapshot = scan_files(root)
 
-            for path, mtime in curr_snapshot.items():
-                if path not in prev_snapshot:
-                    events.append((now, "+", path))
-                    event_count += 1
-                elif mtime != prev_snapshot[path]:
-                    events.append((now, "M", path))
-                    event_count += 1
+                for path, mtime in curr_snapshot.items():
+                    if path not in prev_snapshot:
+                        events.append((now, "+", path))
+                        event_count += 1
+                    elif mtime != prev_snapshot[path]:
+                        events.append((now, "M", path))
+                        event_count += 1
 
-            for path in prev_snapshot:
-                if path not in curr_snapshot:
-                    events.append((now, "D", path))
-                    event_count += 1
+                for path in prev_snapshot:
+                    if path not in curr_snapshot:
+                        events.append((now, "D", path))
+                        event_count += 1
 
-            prev_snapshot = curr_snapshot
+                prev_snapshot = curr_snapshot
 
-            if len(events) > MAX_EVENTS:
-                events = events[-MAX_EVENTS:]
+                if len(events) > MAX_EVENTS:
+                    events = events[-MAX_EVENTS:]
 
-        # ── Header ──
-        dir_name = os.path.basename(root)
-        status = "PAUSED" if paused else "watching"
-        left = f" {ICON_EYE} {dir_name}  ({status})"
-        right = f" {event_count} changes"
-        gap = w - 1 - str_width(left) - len(right)
-        header = left + " " * max(1, gap) + right
-        stdscr.attron(curses.A_BOLD)
-        safe_addstr(stdscr, 0, 0, header, w - 1)
-        stdscr.attroff(curses.A_BOLD)
+            draw_files_mode(stdscr, h, w, root, events, event_count, paused)
+        else:
+            # Rescan
+            if git_ok and not paused and now - last_scan >= scan_interval:
+                branch = get_branch()
+                ahead, behind = get_ahead_behind()
+                files = get_status()
+                stashes = get_stash_count()
+                last_scan = now
 
-        # ── Separator ──
-        if h > 1:
-            safe_addstr(stdscr, 1, 0, "─" * (w - 1), w - 1)
-
-        # ── Events ──
-        list_h = h - 4
-        visible = events[-(list_h + scroll):][:list_h] if scroll else events[-list_h:]
-        for i, (ts, kind, path) in enumerate(visible):
-            row = 2 + i
-            if row >= h - 2:
-                break
-            time_str = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
-            if kind == "+":
-                icon = ICON_ADD
-                label = "+"
-            elif kind == "M":
-                icon = ICON_MOD
-                label = "M"
-            else:
-                icon = ICON_DEL
-                label = "D"
-            line = f" {time_str}  {label} {path}"
-            safe_addstr(stdscr, row, 0, line, w - 1)
-
-        if not events:
-            safe_addstr(stdscr, 2, 0, " Waiting for changes...", w - 1)
-
-        # ── Bottom separator ──
-        if h - 2 >= 0:
-            safe_addstr(stdscr, h - 2, 0, "─" * (w - 1), w - 1)
-
-        # ── Footer ──
-        footer = " p:Pause  c:Clear  q:Quit"
-        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+            cursor = draw_git_mode(
+                stdscr, h, w, git_ok, branch, ahead, behind, stashes, files, cursor, paused
+            )
 
         stdscr.refresh()
 
@@ -183,12 +385,30 @@ def main(stdscr):
             continue
         elif ch == ord("q"):
             break
+        elif ch == ord("\t"):
+            mode = MODE_GIT if mode == MODE_FILES else MODE_FILES
+            if mode == MODE_GIT:
+                last_scan = 0
         elif ch == ord("p"):
             paused = not paused
-        elif ch == ord("c"):
-            events.clear()
-            event_count = 0
-            scroll = 0
+        elif mode == MODE_FILES:
+            if ch == ord("c"):
+                events.clear()
+                event_count = 0
+        elif mode == MODE_GIT:
+            if ch == ord("r"):
+                last_scan = 0
+            elif ch == ord("j") or ch == curses.KEY_DOWN:
+                if files and cursor < len(files) - 1:
+                    cursor += 1
+            elif ch == ord("k") or ch == curses.KEY_UP:
+                if cursor > 0:
+                    cursor -= 1
+            elif ch == ord("g"):
+                cursor = 0
+            elif ch == ord("G"):
+                if files:
+                    cursor = len(files) - 1
 
 
 if __name__ == "__main__":

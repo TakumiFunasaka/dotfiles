@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""c - Countdown TUI (days until deadlines / anniversaries)"""
+
+import curses
+import json
+import os
+import unicodedata
+from datetime import date
+
+COUNTDOWNS_FILE = os.path.expanduser("~/.countdowns.json")
+
+# Nerd Font icons
+ICON_CAL = ""     #
+ICON_CURSOR = ""  #
+ICON_REPEAT = ""  #
+
+
+# ── Display utilities ──────────────────────────────────────────
+
+
+def char_width(ch):
+    cp = ord(ch)
+    if 0xE000 <= cp <= 0xF8FF or 0xF0000 <= cp <= 0xFFFFD or 0x100000 <= cp <= 0x10FFFD:
+        return 2
+    ea = unicodedata.east_asian_width(ch)
+    return 2 if ea in ("F", "W") else 1
+
+
+def str_width(s):
+    return sum(char_width(c) for c in s)
+
+
+def truncate_to_width(s, max_w):
+    w = 0
+    for i, c in enumerate(s):
+        cw = char_width(c)
+        if w + cw > max_w:
+            return s[:i]
+        w += cw
+    return s
+
+
+def safe_addstr(win, y, x, text, max_w, attr=0):
+    truncated = truncate_to_width(text, max_w)
+    try:
+        win.addstr(y, x, truncated, attr)
+    except curses.error:
+        pass
+
+
+def textbox_input(stdscr, y, x, width, prompt="", initial=""):
+    """Text input on curses screen."""
+    curses.curs_set(1)
+    h, w = stdscr.getmaxyx()
+    prompt_w = str_width(prompt)
+    safe_addstr(stdscr, y, x, prompt, w - x)
+    input_x = x + prompt_w
+    max_cols = min(width - prompt_w - 1, w - input_x - 1)
+
+    buf = list(initial)
+    pos = len(buf)
+    scroll = 0
+
+    while True:
+        visible = ""
+        vis_w = 0
+        cursor_col = 0
+
+        for i in range(scroll, len(buf)):
+            cw = char_width(buf[i])
+            if vis_w + cw > max_cols:
+                break
+            visible += buf[i]
+            vis_w += cw
+            if i < pos:
+                cursor_col += cw
+
+        if pos == scroll:
+            cursor_col = 0
+
+        if pos < scroll:
+            scroll = pos
+            continue
+        if cursor_col >= max_cols:
+            scroll += 1
+            continue
+
+        pad = " " * max(0, max_cols - vis_w)
+        try:
+            stdscr.addstr(y, input_x, visible + pad)
+            stdscr.move(y, input_x + cursor_col)
+        except curses.error:
+            pass
+        stdscr.refresh()
+
+        ch = stdscr.get_wch()
+
+        if ch == "\n" or ch == curses.KEY_ENTER:
+            break
+        elif ch == "\x1b":  # ESC
+            curses.curs_set(0)
+            return None
+        elif ch in ("\x7f", "\b", curses.KEY_BACKSPACE):
+            if pos > 0:
+                buf.pop(pos - 1)
+                pos -= 1
+                if scroll > 0:
+                    scroll = max(0, scroll - 1)
+        elif ch == curses.KEY_DC:
+            if pos < len(buf):
+                buf.pop(pos)
+        elif ch == curses.KEY_LEFT:
+            if pos > 0:
+                pos -= 1
+        elif ch == curses.KEY_RIGHT:
+            if pos < len(buf):
+                pos += 1
+        elif ch == curses.KEY_HOME or ch == "\x01":
+            pos = 0
+            scroll = 0
+        elif ch == curses.KEY_END or ch == "\x05":
+            pos = len(buf)
+        elif ch == "\x15":  # Ctrl-U
+            buf = buf[pos:]
+            pos = 0
+            scroll = 0
+        elif ch == "\x0b":  # Ctrl-K
+            buf = buf[:pos]
+        elif isinstance(ch, str) and len(ch) == 1 and ch >= " ":
+            buf.insert(pos, ch)
+            pos += 1
+
+    curses.curs_set(0)
+    return "".join(buf)
+
+
+# ── Data ──────────────────────────────────────────────────────
+
+
+def load_items():
+    if os.path.exists(COUNTDOWNS_FILE):
+        with open(COUNTDOWNS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def save_items(items):
+    with open(COUNTDOWNS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+
+
+def next_id(items):
+    return max((it["id"] for it in items), default=0) + 1
+
+
+def parse_date(text):
+    """Parse YYYY-MM-DD / YYYY/MM/DD / MM-DD / MM/DD (next occurrence). Return date or None."""
+    text = text.strip().replace("/", "-")
+    parts = text.split("-")
+    today = date.today()
+    try:
+        if len(parts) == 3:
+            return date(int(parts[0]), int(parts[1]), int(parts[2]))
+        if len(parts) == 2:
+            m, d = int(parts[0]), int(parts[1])
+            target = date(today.year, m, d)
+            if target < today:
+                target = date(today.year + 1, m, d)
+            return target
+    except ValueError:
+        return None
+    return None
+
+
+def effective_date(item):
+    """Target date; yearly items roll over to the next occurrence."""
+    target = date.fromisoformat(item["date"])
+    today = date.today()
+    if item.get("yearly") and target < today:
+        try:
+            target = date(today.year, target.month, target.day)
+        except ValueError:  # Feb 29
+            target = date(today.year, 2, 28)
+        if target < today:
+            try:
+                target = date(today.year + 1, target.month, target.day)
+            except ValueError:
+                target = date(today.year + 1, 2, 28)
+    return target
+
+
+def days_label(days):
+    if days == 0:
+        return "今日!"
+    if days > 0:
+        return f"あと {days}日"
+    return f"{-days}日前"
+
+
+def main(stdscr):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.keypad(True)
+
+    items = load_items()
+    cursor = 0
+    message = ""
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+        today = date.today()
+
+        # Sort: upcoming first (nearest on top), past at the bottom
+        items.sort(key=lambda it: ((effective_date(it) - today).days < 0, abs((effective_date(it) - today).days) if (effective_date(it) - today).days < 0 else (effective_date(it) - today).days))
+
+        # Header
+        header = f" {ICON_CAL} Countdown ({len(items)})  {today.strftime('%Y-%m-%d')}"
+        stdscr.attron(curses.A_BOLD)
+        safe_addstr(stdscr, 0, 0, header, w - 1)
+        stdscr.attroff(curses.A_BOLD)
+
+        sep = "─" * (w - 1)
+        safe_addstr(stdscr, 1, 0, sep, w - 1)
+
+        # List
+        row = 2
+        for i, item in enumerate(items):
+            if row >= h - 2:
+                break
+            target = effective_date(item)
+            days = (target - today).days
+            prefix = f" {ICON_CURSOR} " if i == cursor else "   "
+            repeat = f" {ICON_REPEAT}" if item.get("yearly") else ""
+            label = days_label(days)
+            left = f"{prefix}{target.strftime('%Y-%m-%d')}  {item['title']}{repeat}"
+            gap = w - 1 - str_width(left) - str_width(label) - 1
+            line = left + " " * max(1, gap) + label
+            attr = curses.A_REVERSE if i == cursor else 0
+            if days < 0:
+                attr |= curses.A_DIM
+            elif days <= 7:
+                attr |= curses.A_BOLD
+            safe_addstr(stdscr, row, 0, line, w - 1, attr)
+            row += 1
+
+        if not items:
+            safe_addstr(stdscr, 2, 0, " No countdowns. Press a to add.", w - 1)
+
+        # Bottom separator
+        if h - 2 >= 0:
+            safe_addstr(stdscr, h - 2, 0, sep, w - 1)
+
+        # Footer
+        if message:
+            footer = f" {message}"
+        else:
+            footer = " a:Add  e:Edit  x:Del  r:Yearly  q:Quit"
+        safe_addstr(stdscr, h - 1, 0, footer, w - 1)
+
+        stdscr.refresh()
+        message = ""
+
+        ch = stdscr.getch()
+
+        if ch == ord("q"):
+            break
+        elif ch == ord("j") or ch == curses.KEY_DOWN:
+            if items and cursor < len(items) - 1:
+                cursor += 1
+        elif ch == ord("k") or ch == curses.KEY_UP:
+            if cursor > 0:
+                cursor -= 1
+        elif ch == ord("g"):
+            cursor = 0
+        elif ch == ord("G"):
+            if items:
+                cursor = len(items) - 1
+        elif ch == ord("a"):
+            title = textbox_input(stdscr, h - 1, 0, w, " Title: ")
+            if title and title.strip():
+                date_str = textbox_input(stdscr, h - 1, 0, w, " Date (YYYY-MM-DD or MM-DD): ")
+                target = parse_date(date_str) if date_str else None
+                if target:
+                    items.append(
+                        {
+                            "id": next_id(items),
+                            "title": title.strip(),
+                            "date": str(target),
+                            "yearly": False,
+                            "created": str(date.today()),
+                        }
+                    )
+                    save_items(items)
+                    message = "Added"
+                elif date_str is not None:
+                    message = "Invalid date"
+        elif ch == ord("e"):
+            if items:
+                item = items[cursor]
+                new_title = textbox_input(stdscr, h - 1, 0, w, " Title: ", item["title"])
+                if new_title is not None and new_title.strip():
+                    new_date_str = textbox_input(stdscr, h - 1, 0, w, " Date: ", item["date"])
+                    if new_date_str is not None:
+                        target = parse_date(new_date_str)
+                        if target:
+                            item["title"] = new_title.strip()
+                            item["date"] = str(target)
+                            save_items(items)
+                            message = "Updated"
+                        else:
+                            message = "Invalid date"
+        elif ch == ord("x"):
+            if items:
+                title = items[cursor]["title"]
+                prompt = f" Delete '{title}'? (y/n) "
+                pad = " " * max(0, w - 1 - str_width(prompt))
+                safe_addstr(stdscr, h - 1, 0, prompt + pad, w - 1, curses.A_REVERSE)
+                stdscr.refresh()
+                confirm = stdscr.getch()
+                if confirm == ord("y"):
+                    items.pop(cursor)
+                    if cursor >= len(items) and cursor > 0:
+                        cursor -= 1
+                    save_items(items)
+                    message = "Deleted"
+                else:
+                    message = "Cancelled"
+        elif ch == ord("r"):
+            if items:
+                items[cursor]["yearly"] = not items[cursor].get("yearly", False)
+                save_items(items)
+                message = "Yearly: " + ("on" if items[cursor]["yearly"] else "off")
+
+
+if __name__ == "__main__":
+    curses.wrapper(main)
