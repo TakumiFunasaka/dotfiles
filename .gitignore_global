@@ -34,3 +34,5 @@ venv/
 
 # OS generated
 Thumbs.db
+
+**/.claude/settings.local.json
