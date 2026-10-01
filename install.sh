@@ -51,6 +51,32 @@ ln -sf "$DOTFILES_DIR/bat/config" "$HOME/.config/bat/config"
 echo "✅ Symlinks created!"
 
 # ----------------------------------------------------------------------------
+# Karabiner-Elements（シンボリックリンクだと設定の保存で壊れるのでコピー）
+# ----------------------------------------------------------------------------
+if [ ! -f "$HOME/.config/karabiner/karabiner.json" ]; then
+  mkdir -p "$HOME/.config/karabiner"
+  cp "$DOTFILES_DIR/karabiner/karabiner.json" "$HOME/.config/karabiner/karabiner.json"
+  echo "✅ Karabiner config copied"
+fi
+
+# ----------------------------------------------------------------------------
+# mise グローバル設定（dotfiles内に mise/config.toml を置くと
+# このディレクトリ用の設定と誤認されるため、別名で置いてコピーする）
+# ----------------------------------------------------------------------------
+if [ ! -f "$HOME/.config/mise/config.toml" ]; then
+  mkdir -p "$HOME/.config/mise"
+  cp "$DOTFILES_DIR/mise-global/config.toml" "$HOME/.config/mise/config.toml"
+  echo "✅ mise config copied"
+fi
+
+# ----------------------------------------------------------------------------
+# iTerm2（設定をdotfiles/iterm2から読み込む）
+# ----------------------------------------------------------------------------
+defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$DOTFILES_DIR/iterm2"
+defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
+echo "✅ iTerm2 will load settings from $DOTFILES_DIR/iterm2"
+
+# ----------------------------------------------------------------------------
 # Homebrewのインストール確認
 # ----------------------------------------------------------------------------
 if ! command -v brew &> /dev/null; then
@@ -81,12 +107,10 @@ fi
 # ----------------------------------------------------------------------------
 if command -v mise &> /dev/null; then
   echo "🔧 Setting up mise..."
-  
-  # よく使う言語をインストール（コメントアウト - 必要に応じて有効化）
-  # mise use -g node@lts
-  # mise use -g python@3.12
-  # mise use -g go@latest
-  
+
+  # ~/.config/mise/config.toml に書いた言語をインストール
+  mise install
+
   echo "✅ mise setup complete!"
 fi
 

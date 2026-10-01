@@ -45,11 +45,46 @@ brew "neovim"            # 現代的なVim
 brew "wget"
 brew "curl"
 brew "tree"
+brew "git-filter-repo"   # gitの履歴書き換え
+brew "xcodegen"          # Xcodeプロジェクト生成（iOSアプリ）
+brew "php"
+brew "awscli"            # AWS CLI
+brew "picocom"           # シリアル通信
 
 # ----------------------------------------------------------------------------
-# Applications (Optional - コメントアウトしておく)
+# Data & Cloud
+# ----------------------------------------------------------------------------
+tap "databricks/tap"
+tap "supabase/tap"
+brew "databricks/tap/databricks"   # Databricks CLI（banban分析）
+brew "supabase/tap/supabase"       # Supabase CLI
+
+# ----------------------------------------------------------------------------
+# Documents & Media
+# ----------------------------------------------------------------------------
+brew "asciidoctor"       # AsciiDoc
+brew "poppler"           # PDF操作（pdftotextなど）
+brew "ffmpeg"            # 動画・音声変換
+brew "exiftool"          # 画像のメタデータ
+
+# ----------------------------------------------------------------------------
+# Network
+# ----------------------------------------------------------------------------
+brew "sstp-client"       # SSTP VPN
+
+# ----------------------------------------------------------------------------
+# Applications
 # ----------------------------------------------------------------------------
 cask "iterm2"
+cask "font-hack-nerd-font"   # iTerm2/nvim用フォント
+cask "jordanbaird-ice"       # メニューバー整理
+cask "blackhole-2ch"         # 仮想オーディオ
+cask "godot"                 # ゲームエンジン
+# 手動で入れているアプリ（会社のSelf Serviceで入れられるものはそちらを優先）
+# cask "karabiner-elements"
+# cask "raycast"
+# cask "obsidian"
+# cask "cursor"
 # cask "visual-studio-code"
 # cask "docker"
 

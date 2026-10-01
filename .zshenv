@@ -15,3 +15,5 @@ fi
 # dotfiles bin
 export PATH="$HOME/dotfiles/bin:$PATH"
 
+# Rust (rustup)
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"

@@ -215,4 +215,4 @@ fi
 # vim:set ft=zsh:
 
 # Added by Antigravity
-export PATH="/Users/takumi.funasaka2/.antigravity/antigravity/bin:$PATH"
+export PATH="$HOME/.antigravity/antigravity/bin:$PATH"

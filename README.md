@@ -12,42 +12,44 @@ macOS 開発環境の設定ファイル一式。新しい Mac でもコマンド
 ### 手順
 
 ```bash
-# 1. Homebrew をインストール
+# 1. SSH鍵を作って GitHub に登録（clone に必要）
+ssh-keygen -t ed25519 -C "takumi.funasaka@genda.jp"
+brew install gh 2>/dev/null || true   # Homebrew 導入後でもよい
+gh auth login                          # SSH を選ぶと公開鍵も登録できる
+
+# 2. Homebrew をインストール
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 eval "$(/opt/homebrew/bin/brew shellenv)"
 
-# 2. dotfiles をクローン
+# 3. dotfiles をクローン
 git clone git@github.com:TakumiFunasaka/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 
-# 3. インストールスクリプトを実行
+# 4. インストールスクリプトを実行
+#    シンボリックリンク・Brewfile・mise（node）・nvimプラグイン・Karabiner・iTerm2設定まで入る
 chmod +x install.sh
 ./install.sh
 
-# 4. シェルを再起動
+# 5. シェルを再起動
 exec zsh
 
-# 5. 言語バージョンをインストール（必要に応じて）
-mise use -g node@lts
-mise use -g python@3.12
-mise use -g go@latest
+# 6. 必要に応じて
+npm i -g @marp-team/marp-cli                                      # Marp
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh    # Rust
 ```
 
-### iTerm2 の初期設定（手動）
+### iTerm2
 
-1. `iTerm2` > `Settings` (Cmd+,) > `Profiles` > `Text`
-   - Font を **Nerd Font** に変更（例: `Hack Nerd Font`）
-   - 未インストールなら `brew install --cask font-hack-nerd-font`
-2. `Profiles` > `Colors` > `Color Presets...` > `Import...`
-   - `~/dotfiles/gruvbox-dark.itermcolors` を選択
-   - もう一度 `Color Presets...` > `gruvbox-dark` を選択
-3. `Profiles` > `Keys` > `General`
-   - Left Option key を `Esc+` に変更
-4. `Profiles` > `Terminal`
-   - Scrollback lines を `10000` 以上に
-   - `Enable mouse reporting` をチェック
-5. `Profiles` > `Window`
-   - Columns: `200`, Rows: `50` 程度に
+`install.sh` が iTerm2 の設定の読み込み先を `~/dotfiles/iterm2/` に切り替える。
+iTerm2 を一度終了して起動し直すと、フォント・配色（Gruvbox Dark）・キー設定などがそのまま戻る。
+
+設定を変えたら `Settings` > `General` > `Settings` > `Save Now` で `iterm2/` に書き出してコミットする。
+
+### Karabiner-Elements
+
+アプリは手動で入れる。`install.sh` が `karabiner/karabiner.json` を `~/.config/karabiner/` にコピーする
+（Karabiner は設定ファイルを書き換えるため、シンボリックリンクではなくコピー）。
+設定を変えたら `cp ~/.config/karabiner/karabiner.json ~/dotfiles/karabiner/` でdotfilesに戻す。
 
 ---
 
@@ -70,13 +72,20 @@ dotfiles/
 ├── bat/
 │   └── config              # bat設定（gruvbox-dark テーマ）
 ├── bin/
+│   ├── l                   # ランチャーTUI（bin配下のツール一覧）
 │   ├── t                   # タスク管理TUI
-│   ├── n                   # メモ/ノートTUI（2ペイン）
 │   ├── p                   # ポモドーロタイマーTUI
-│   ├── w                   # ファイルウォッチャーTUI
+│   ├── w                   # ファイル/GitウォッチャーTUI（Tabで切替）
 │   ├── s                   # サーバー/ポートモニターTUI
-│   ├── gw                  # Gitウォッチャー TUI
-│   └── h                   # ヘルスリマインダーTUI
+│   ├── h                   # ヘルスリマインダーTUI
+│   ├── c                   # カウントダウンTUI
+│   └── x                   # ミニゲームTUI
+├── iterm2/
+│   └── com.googlecode.iterm2.plist   # iTerm2の設定一式
+├── karabiner/
+│   └── karabiner.json      # Karabiner-Elementsの設定
+├── mise-global/
+│   └── config.toml         # miseのグローバル設定（node）。install.shが~/.config/mise/にコピー
 ├── gruvbox-dark.itermcolors      # iTerm2カラープリセット
 ├── Brewfile                # Homebrewパッケージ定義
 ├── install.sh              # インストールスクリプト
