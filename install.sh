@@ -95,6 +95,15 @@ fi
 # Brewfileからインストール
 # ----------------------------------------------------------------------------
 if [ -f "$DOTFILES_DIR/Brewfile" ]; then
+  # Homebrew 7 以降は公式以外の tap を信頼しないと読み込まない（brew bundle がそこで止まる）
+  # brew trust が無い古い Homebrew では信頼の手順を飛ばす
+  for tap in databricks/tap supabase/tap; do
+    brew tap "$tap"
+    if brew help trust &> /dev/null; then
+      brew trust "$tap"
+    fi
+  done
+
   echo "🍺 Installing packages from Brewfile..."
   brew bundle --file="$DOTFILES_DIR/Brewfile"
   echo "✅ Packages installed!"

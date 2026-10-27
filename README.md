@@ -493,6 +493,8 @@ brew bundle dump --file=~/dotfiles/Brewfile --force
 brew bundle cleanup --file=~/dotfiles/Brewfile
 ```
 
+Homebrew 7 以降は、公式以外の tap（`databricks/tap`, `supabase/tap`）を `brew trust <tap>` で信頼しないと `brew bundle` が止まる。`install.sh` は brew bundle の前に信頼するので、手で `brew bundle` だけ実行するときは先に `brew trust databricks/tap` と `brew trust supabase/tap` を実行しておく。新しい tap を Brewfile に足したら `install.sh` の tap 一覧にも追加する。
+
 ---
 
 ## 自作 TUI ツール (`~/dotfiles/bin/`)
