@@ -48,6 +48,7 @@ brew "tree"
 brew "git-filter-repo"   # gitの履歴書き換え
 brew "xcodegen"          # Xcodeプロジェクト生成（iOSアプリ）
 brew "php"
+brew "python@3.13"     # .zshenvで3.13を優先して使う
 brew "awscli"            # AWS CLI
 brew "picocom"           # シリアル通信
 

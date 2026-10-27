@@ -38,6 +38,10 @@
 	# 色分け
 	colorMoved = default
 
+[http]
+	# macOS標準のlibcurlは /etc/ssl/cert.pem（更新されない）を見るため、Homebrewの証明書一覧を使う
+	sslCAInfo = /opt/homebrew/etc/ca-certificates/cert.pem
+
 [alias]
 	# よく使うコマンドの短縮形
 	st = status
